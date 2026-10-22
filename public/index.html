@@ -1,0 +1,117 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>PADOSI · Kirana quotes</title>
+  <meta name="description" content="Turn a shopper's WhatsApp list into a priced, owner-approved quote in seconds.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%231f5f45'/><text x='32' y='44' font-size='34' text-anchor='middle' fill='%23f4b942' font-family='Arial' font-weight='700'>P</text></svg>">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">P</span>
+      <div>
+        <div class="brand-name">PADOSI</div>
+        <div class="brand-store" id="storeName">Kirana</div>
+      </div>
+    </div>
+    <nav class="tabs" role="tablist">
+      <button class="tab active" data-view="quote" role="tab">New quote</button>
+      <button class="tab" data-view="orders" role="tab">Orders</button>
+      <button class="tab" data-view="catalogue" role="tab">Catalogue</button>
+    </nav>
+  </header>
+
+  <div id="banner" class="banner" hidden></div>
+
+  <main>
+    <!-- NEW QUOTE -->
+    <section id="view-quote" class="view">
+      <div id="composer" class="card">
+        <h1>Paste a shopper's list</h1>
+        <p class="muted">Copy the WhatsApp message, or add a photo of a handwritten list. Kannada, Hindi and English all work.</p>
+
+        <div class="row two">
+          <label>Customer name<input id="custName" placeholder="e.g. Lakshmi aunty" autocomplete="off"></label>
+          <label>WhatsApp number<input id="custPhone" placeholder="98450 12345" inputmode="tel" autocomplete="off"></label>
+        </div>
+
+        <label>List
+          <textarea id="listText" rows="7" placeholder="2 kg tamatar&#10;nandini haalu 2&#10;togari bele 1kg&#10;Amul 500&#10;kothambari soppu"></textarea>
+        </label>
+
+        <div class="samples">
+          <span class="muted small">Try a sample:</span>
+          <button class="chip" data-sample="0">Kannada mix</button>
+          <button class="chip" data-sample="1">Hindi mix</button>
+          <button class="chip" data-sample="2">Messy WhatsApp</button>
+        </div>
+
+        <div class="photo-row">
+          <label class="photo-btn">
+            <input id="photoInput" type="file" accept="image/*" hidden>
+            <span>📷 &nbsp;Add photo of list</span>
+          </label>
+          <div id="photoPreview" class="photo-preview" hidden>
+            <img id="photoImg" alt="Shopper's list">
+            <button id="photoClear" class="link">Remove</button>
+          </div>
+        </div>
+
+        <button id="makeQuote" class="primary big">Make quote</button>
+        <p id="composeError" class="error" hidden></p>
+      </div>
+
+      <div id="working" class="card working" hidden>
+        <div class="spinner"></div>
+        <div>
+          <strong>Reading the list…</strong>
+          <div class="muted small">Matching items to your catalogue and pricing them</div>
+        </div>
+      </div>
+
+      <div id="review" hidden></div>
+    </section>
+
+    <!-- ORDERS -->
+    <section id="view-orders" class="view" hidden>
+      <div id="stats" class="stats"></div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Quotes</h2>
+          <button id="refreshOrders" class="ghost small-btn">Refresh</button>
+        </div>
+        <div id="ordersList"></div>
+      </div>
+    </section>
+
+    <!-- CATALOGUE -->
+    <section id="view-catalogue" class="view" hidden>
+      <div class="card">
+        <div class="card-head wrap">
+          <div>
+            <h2>Store catalogue</h2>
+            <p class="muted small" id="catCount"></p>
+          </div>
+          <div class="btn-group">
+            <label class="ghost small-btn file-btn">Upload CSV<input id="csvInput" type="file" accept=".csv,text/csv" hidden></label>
+            <a class="ghost small-btn" href="/api/catalogue.csv" download>Download CSV</a>
+            <button id="resetCat" class="ghost small-btn">Load sample</button>
+          </div>
+        </div>
+        <p class="muted small">CSV columns: <code>id, name, aliases, category, unit, price, stock</code>. Only <code>name</code> and <code>price</code> are required. Separate aliases with <code>;</code> (e.g. <code>togari bele;tur dal</code>). Tap a price or stock figure to edit it.</p>
+        <input id="catSearch" class="search" placeholder="Search items or aliases…">
+        <div id="catTable" class="table-wrap"></div>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>

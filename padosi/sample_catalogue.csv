@@ -1,0 +1,57 @@
+id,name,aliases,category,unit,price,stock
+RICE-SM-5,Sona Masoori Rice,akki;chawal;sona masuri;rice,Staples,5 kg bag,365,14
+RICE-SM-1,Sona Masoori Rice (loose),akki;chawal;loose rice,Staples,1 kg,72,60
+ATTA-AASH-5,Aashirvaad Atta,atta;godhi hittu;wheat flour;gehun ka atta,Staples,5 kg bag,285,10
+RAGI-1,Ragi Flour,ragi hittu;ragi;finger millet flour;nachni,Staples,1 kg,68,18
+RAVA-500,Bombay Rava,rava;sooji;suji;semolina;rave,Staples,500 g,32,25
+POHA-500,Poha (thick),avalakki;poha;chivda;beaten rice,Staples,500 g,38,20
+TOOR-1,Toor Dal,togari bele;tur dal;arhar dal;toor,Pulses,1 kg,168,22
+MOONG-1,Moong Dal,hesaru bele;moong;mung dal;pesara pappu,Pulses,1 kg,132,15
+URAD-1,Urad Dal,uddina bele;urad;udad dal;minapa pappu,Pulses,1 kg,145,12
+CHANA-1,Chana Dal,kadale bele;chana dal;bengal gram,Pulses,1 kg,98,16
+SUGAR-1,Sugar,sakkare;cheeni;shakkar,Staples,1 kg,46,40
+SALT-TATA-1,Tata Salt,uppu;namak;salt,Staples,1 kg,28,35
+JAGGERY-1,Jaggery,bella;gud;gur,Staples,1 kg,72,14
+OIL-SUN-1,Sunflower Oil (Gold Winner),enne;tel;oil;sunflower oil;gold winner,Oils,1 L pouch,155,24
+OIL-GN-1,Groundnut Oil,kadalekai enne;mungfali tel;groundnut oil;peanut oil,Oils,1 L,210,8
+GHEE-NAN-500,Nandini Ghee,tuppa;ghee;ghee nandini,Dairy,500 ml,340,9
+MILK-NAN-500,Nandini Toned Milk,haalu;doodh;milk;nandini milk;blue packet,Dairy,500 ml packet,24,80
+MILK-AMUL-500,Amul Taaza Milk,amul milk;amul taaza;amul 500 milk,Dairy,500 ml packet,29,30
+CURD-NAN-500,Nandini Curd,mosaru;dahi;curd,Dairy,500 g,28,30
+BUTTER-AMUL-100,Amul Butter,benne;makkhan;butter;amul butter small,Dairy,100 g,58,20
+BUTTER-AMUL-500,Amul Butter (large),benne;makkhan;amul butter big;amul 500 butter,Dairy,500 g,285,4
+PANEER-200,Nandini Paneer,paneer;cottage cheese,Dairy,200 g,95,6
+EGG-6,Eggs,motte;ande;anda;egg,Dairy,6 pcs,48,30
+BREAD-MOD,Modern Bread (white),bread;double roti;pav,Bakery,400 g,45,12
+ONION-1,Onion,eerulli;pyaaz;kanda;ullipaya,Vegetables,1 kg,38,50
+TOMATO-1,Tomato,tamatar;tomato hannu;tomoto;tamato,Vegetables,1 kg,30,40
+POTATO-1,Potato,aloo;aalugadde;batata;urulai,Vegetables,1 kg,34,45
+CORIANDER-1,Coriander Leaves,kothambari;kottambari soppu;dhaniya;cilantro,Vegetables,1 bunch,10,0
+CHILLI-G-100,Green Chilli,hasi menasinakai;hari mirch;menasinakai;green chillies,Vegetables,100 g,8,25
+GINGER-100,Ginger,shunti;adrak,Vegetables,100 g,14,20
+GARLIC-100,Garlic,bellulli;lehsun;lasun,Vegetables,100 g,24,20
+CURRYLEAF-1,Curry Leaves,karibevu;kadi patta,Vegetables,1 bunch,5,30
+COCONUT-1,Coconut,tenginakai;kaayi;nariyal;thengai,Vegetables,1 pc,35,25
+LEMON-1,Lemon,nimbe hannu;nimbu;lime,Vegetables,1 pc,6,60
+BANANA-DZ,Banana (Yelakki),baale hannu;kela;yelakki;elaichi banana,Fruits,1 dozen,70,10
+TURMERIC-100,Turmeric Powder,arishina;haldi,Masala,100 g,32,20
+CHILLIPWD-100,Chilli Powder (Byadgi),khara pudi;mirchi powder;lal mirch;byadgi,Masala,100 g,48,18
+JEERA-100,Cumin (Jeera),jeerige;jeera;cumin,Masala,100 g,62,15
+MUSTARD-100,Mustard Seeds,sasive;rai;sarson;mustard,Masala,100 g,22,15
+MTR-RASAM-100,MTR Rasam Powder,rasam pudi;rasam powder;saaru pudi,Masala,100 g,62,10
+MTR-SAMBAR-100,MTR Sambar Powder,sambar pudi;sambar powder;huli pudi,Masala,100 g,64,10
+TEA-RL-250,Red Label Tea,tea;chai patti;tea powder;red label,Beverages,250 g,145,12
+COFFEE-NAR-200,Narasus Filter Coffee,coffee pudi;filter coffee;kaapi;coffee powder,Beverages,200 g,140,8
+BRU-100,Bru Instant Coffee,bru;instant coffee,Beverages,100 g,195,6
+MAGGI-4,Maggi Noodles,maggi;noodles,Snacks,4-pack,56,20
+PARLEG-1,Parle-G Biscuits,parle g;biscuit;glucose biscuit,Snacks,250 g,25,30
+GOODDAY-1,Good Day Cashew,good day;cashew biscuit,Snacks,200 g,40,15
+KURKURE-1,Kurkure Masala Munch,kurkure,Snacks,90 g,20,20
+SURF-1,Surf Excel Easy Wash,surf;detergent;washing powder,Household,1 kg,140,10
+RIN-BAR,Rin Bar,rin;soap bar;washing soap,Household,250 g,22,20
+VIM-BAR,Vim Bar,vim;dishwash bar;paatre soap,Household,300 g,30,18
+HARPIC-500,Harpic Toilet Cleaner,harpic;toilet cleaner,Household,500 ml,105,7
+LIFEBUOY-4,Lifebuoy Soap,lifebuoy;bath soap;snana soap,Personal care,4 x 100 g,150,8
+COLGATE-200,Colgate Toothpaste,colgate;toothpaste;paste,Personal care,200 g,118,10
+AGARBATTI-1,Cycle Agarbatti,agarbatti;oodubatti;incense,Pooja,1 pack,55,12
+CAMPHOR-1,Camphor,karpoora;kapoor,Pooja,50 g,60,10
