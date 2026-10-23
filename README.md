@@ -40,7 +40,7 @@ Whether owners feel this pain is still an open question. See [research/owner-int
 
 - **Backend:** Python + FastAPI (`app.py`), deployed as a Vercel Python function
 - **Database:** Postgres when `DATABASE_URL` is set (e.g. Neon via the Vercel Marketplace), SQLite file otherwise
-- **AI:** Gemini (`gemini-3.8-flash`, via `GEMINI_API_KEY`) or Claude (`claude-opus-5-5`, via `ANTHROPIC_API_KEY`), both with structured JSON output. Whichever key is set is used; Claude wins if both are.
+- **AI:** Gemini (`gemini-3.8-flash`, via `GEMINI_API_KEY`) Gemini through OpenRouter (`google/gemini-3.8-flash`, via `OPENROUTER_API_KEY`), or Claude (`claude-opus-5-5`, via `ANTHROPIC_API_KEY`), all with structured JSON output. Checked in the order Claude, Gemini, OpenRouter.
 - **Frontend:** plain HTML/CSS/JS in `public/`, no build step
 
 n8n from the scope doc is replaced by the API route in `app.py`, which does the same job (receive list → call Claude → run the pricing script → flag low-confidence lines) with one fewer service to host.
@@ -61,7 +61,7 @@ Open http://localhost:8000. Without an API key the app runs in demo mode: typed 
 1. Push this folder to a GitHub repo.
 2. In Vercel: **Add New → Project**, import the repo. Vercel detects FastAPI from `app.py`; no settings needed.
 3. **Storage → Create Database → Neon (Postgres)** and connect it to the project. This sets `DATABASE_URL`.
-4. **Settings → Environment Variables:** add `GEMINI_API_KEY` (or `ANTHROPIC_API_KEY`) and, optionally, `STORE_NAME`.
+4. **Settings → Environment Variables:** add `OPENROUTER_API_KEY`, `GEMINI_API_KEY` or `ANTHROPIC_API_KEY` and, optionally, `STORE_NAME`.
 5. Redeploy. Tables and the sample catalogue are created on first request.
 
 Without a database, the deployed app still works but stores data in `/tmp`, which resets whenever the function restarts.

@@ -52,7 +52,7 @@ function esc(s) {
 
 // ---------- which AI is connected ----------
 
-const AI_NAMES = { claude: "Claude", gemini: "Gemini" };
+const AI_NAMES = { claude: "Claude", gemini: "Gemini", openrouter: "Gemini" };
 const aiOn = () => !!state.health && state.health.ai !== "offline";
 const aiName = () => state.health?.ai_name || "AI";
 

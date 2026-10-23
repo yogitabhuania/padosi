@@ -5,8 +5,8 @@
 2. Read a supplier bill or price list (text or photo) into catalogue rows, so a new store can
    set up its catalogue in minutes instead of typing it in.
 
-Either Claude (ANTHROPIC_API_KEY) or Gemini (GEMINI_API_KEY) does the reading; Claude wins if
-both keys are set. The AI never prices anything: pricing.py does the money, and the owner
+Claude (ANTHROPIC_API_KEY), Gemini (GEMINI_API_KEY) or Gemini through OpenRouter
+(OPENROUTER_API_KEY) does the reading, checked in that order. The AI never prices anything: pricing.py does the money, and the owner
 approves every line. Without a key, a simple fuzzy matcher stands in so typed lists still work.
 """
 import base64
@@ -18,7 +18,9 @@ import re
 CLAUDE_MODEL = os.environ.get("PADOSI_MODEL", "claude-opus-5-5")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
 GEMINI_FALLBACK_MODEL = "gemini-flash-latest"
-AI_NAMES = {"claude": "Claude", "gemini": "Gemini"}
+OPENROUTER_MODEL = os.environ.get("OPENROUTER_MODEL", "google/gemini-3.8-flash")
+OPENROUTER_FALLBACK_MODEL = "google/gemini-3.6-flash"
+AI_NAMES = {"claude": "Claude", "gemini": "Gemini", "openrouter": "Gemini"}
 
 LANGUAGES = ["english", "kannada", "hindi", "tamil", "telugu", "mixed"]
 
@@ -116,15 +118,28 @@ def ai_provider():
         return "claude"
     if _gemini_key():
         return "gemini"
+    if _openrouter_key():
+        return "openrouter"
     return None
 
 
 # GEMINI_API_KEY is the documented name; the others catch keys saved under a looser name.
 GEMINI_KEY_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY", "GEMINI", "gemini", "gemini_api_key")
+OPENROUTER_KEY_NAMES = ("OPENROUTER_API_KEY", "OPENROUTER_KEY", "openrouter")
+
+
+def _keys(names):
+    return [os.environ[n].strip() for n in names if os.environ.get(n, "").strip()]
 
 
 def _gemini_key():
-    return next((os.environ[n].strip() for n in GEMINI_KEY_NAMES if os.environ.get(n, "").strip()), None)
+    # An OpenRouter key (sk-or-...) saved under a Gemini name belongs to OpenRouter, not Google.
+    return next((k for k in _keys(GEMINI_KEY_NAMES) if not k.startswith("sk-or-")), None)
+
+
+def _openrouter_key():
+    keys = _keys(OPENROUTER_KEY_NAMES) + [k for k in _keys(GEMINI_KEY_NAMES) if k.startswith("sk-or-")]
+    return keys[0] if keys else None
 
 
 def ai_enabled():
@@ -136,7 +151,7 @@ def ai_name():
 
 
 def ai_model():
-    return {"claude": CLAUDE_MODEL, "gemini": GEMINI_MODEL}.get(ai_provider())
+    return {"claude": CLAUDE_MODEL, "gemini": GEMINI_MODEL, "openrouter": OPENROUTER_MODEL}.get(ai_provider())
 
 
 def _catalogue_block(catalogue):
@@ -252,8 +267,60 @@ def _ask_gemini(instructions, catalogue, prompt, image_b64, media_type, schema):
         raise MatchError("Gemini returned an unreadable answer. Try again.")
 
 
+def _ask_openrouter(instructions, catalogue, prompt, image_b64, media_type, schema):
+    """Gemini Flash through OpenRouter's chat-completions API, with JSON-schema output."""
+    import httpx
+
+    content = []
+    if image_b64:
+        content.append({"type": "image_url", "image_url": {"url": f"data:{media_type};base64,{image_b64}"}})
+    content.append({"type": "text", "text": prompt})
+    key = _openrouter_key()
+    for model in dict.fromkeys([OPENROUTER_MODEL, OPENROUTER_FALLBACK_MODEL]):
+        try:
+            r = httpx.post(
+                "https://openrouter.ai/api/v1/chat/completions",
+                headers={"Authorization": f"Bearer {key}", "X-Title": "PADOSI"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": instructions + "\n\n" + _catalogue_block(catalogue)},
+                        {"role": "user", "content": content},
+                    ],
+                    "response_format": {"type": "json_schema", "json_schema": {"name": "padosi", "strict": True, "schema": schema}},
+                },
+                timeout=90,
+            )
+        except httpx.HTTPError:
+            raise MatchError("Could not reach OpenRouter. Check the internet connection.")
+        if r.status_code == 404 and model != OPENROUTER_FALLBACK_MODEL:
+            continue  # model unavailable; try the previous Flash release
+        if r.status_code in (401, 403):
+            raise MatchError(f"OpenRouter rejected the key ({key[:6]}…, {len(key)} characters). Check OPENROUTER_API_KEY.")
+        if r.status_code == 402:
+            raise MatchError("The OpenRouter account is out of credit.")
+        if r.status_code == 429:
+            raise MatchError("OpenRouter is rate limited right now. Try again in a minute.")
+        if r.status_code >= 400:
+            raise MatchError(f"OpenRouter returned an error ({r.status_code}). Try again.")
+        break
+    try:
+        choice = r.json()["choices"][0]
+        text_out = choice["message"].get("content") or ""
+    except (ValueError, KeyError, IndexError):
+        raise MatchError("OpenRouter returned an unreadable answer. Try again.")
+    if choice.get("finish_reason") == "length":
+        raise MatchError("This is too long to read in one go. Split it into two.")
+    if not text_out:
+        raise MatchError("Gemini declined to read this.")
+    try:
+        return json.loads(text_out)
+    except ValueError:
+        raise MatchError("Gemini returned an unreadable answer. Try again.")
+
+
 def _ask_ai(instructions, catalogue, prompt, image_b64, media_type, schema):
-    ask = _ask_claude if ai_provider() == "claude" else _ask_gemini
+    ask = {"claude": _ask_claude, "gemini": _ask_gemini, "openrouter": _ask_openrouter}[ai_provider()]
     return ask(instructions, catalogue, prompt, image_b64, media_type, schema)
 
 
@@ -266,7 +333,7 @@ def match_with_ai(catalogue, text, image_b64=None, media_type=None, customer_nam
 
 def extract_catalogue(catalogue, text, image_b64=None, media_type=None):
     if not ai_enabled():
-        raise MatchError("Reading bills needs an AI key (GEMINI_API_KEY or ANTHROPIC_API_KEY), or upload a CSV instead.")
+        raise MatchError("Reading bills needs an AI key (GEMINI_API_KEY, OPENROUTER_API_KEY or ANTHROPIC_API_KEY), or upload a CSV instead.")
     prompt = _prompt(text, image_b64, "This photo is a supplier bill or price list.", "Supplier bill or price list:")
     return _ask_ai(CATALOGUE_INSTRUCTIONS, catalogue, prompt, image_b64, media_type, CATALOGUE_SCHEMA)["items"]
 
@@ -364,6 +431,6 @@ def match_list(catalogue, text, image_b64=None, media_type=None, customer_name="
         result = match_with_ai(catalogue, text, image_b64, media_type, customer_name)
         return {**result, "engine": ai_provider()}
     if image_b64:
-        raise MatchError("Reading photos needs an AI key (GEMINI_API_KEY or ANTHROPIC_API_KEY). Type the list instead.")
+        raise MatchError("Reading photos needs an AI key (GEMINI_API_KEY, OPENROUTER_API_KEY or ANTHROPIC_API_KEY). Type the list instead.")
     return {"items": match_offline(catalogue, text), "language": "", "reply_opening": "",
             "reply_closing": "", "engine": "offline"}
