@@ -5,15 +5,20 @@
 2. Read a supplier bill or price list (text or photo) into catalogue rows, so a new store can
    set up its catalogue in minutes instead of typing it in.
 
-Claude never prices anything: pricing.py does the money, and the owner approves every line.
-Without an API key, a simple fuzzy matcher stands in so typed lists still work.
+Either Claude (ANTHROPIC_API_KEY) or Gemini (GEMINI_API_KEY) does the reading; Claude wins if
+both keys are set. The AI never prices anything: pricing.py does the money, and the owner
+approves every line. Without a key, a simple fuzzy matcher stands in so typed lists still work.
 """
+import base64
 import difflib
 import json
 import os
 import re
 
-MODEL = os.environ.get("PADOSI_MODEL", "claude-opus-5-5")
+CLAUDE_MODEL = os.environ.get("PADOSI_MODEL", "claude-opus-5-5")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.8-flash")
+GEMINI_FALLBACK_MODEL = "gemini-flash-latest"
+AI_NAMES = {"claude": "Claude", "gemini": "Gemini"}
 
 LANGUAGES = ["english", "kannada", "hindi", "tamil", "telugu", "mixed"]
 
@@ -106,8 +111,24 @@ Return one entry per product (skip headers, totals, taxes, discounts and deliver
 - confidence: 0 to 1, how sure you are that you read the product, pack size and price correctly."""
 
 
+def ai_provider():
+    if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
+        return "claude"
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return "gemini"
+    return None
+
+
 def ai_enabled():
-    return bool(os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"))
+    return ai_provider() is not None
+
+
+def ai_name():
+    return AI_NAMES.get(ai_provider(), "AI")
+
+
+def ai_model():
+    return {"claude": CLAUDE_MODEL, "gemini": GEMINI_MODEL}.get(ai_provider())
 
 
 def _catalogue_block(catalogue):
@@ -120,23 +141,24 @@ class MatchError(Exception):
     pass
 
 
-def _user_content(text, image_b64, media_type, photo_label, text_label):
+def _prompt(text, image_b64, photo_label, text_label):
     if image_b64:
-        return [
-            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
-            {"type": "text", "text": photo_label + (f"\n\nThe owner also typed:\n{text}" if text else "")},
-        ]
-    return [{"type": "text", "text": f"{text_label}\n{text}"}]
+        return photo_label + (f"\n\nThe owner also typed:\n{text}" if text else "")
+    return f"{text_label}\n{text}"
 
 
-def _ask_claude(instructions, catalogue, content, schema):
+def _ask_claude(instructions, catalogue, prompt, image_b64, media_type, schema):
     """One structured-output request. The catalogue goes in the system prompt so it is cached."""
     import anthropic
 
+    content = []
+    if image_b64:
+        content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}})
+    content.append({"type": "text", "text": prompt})
     client = anthropic.Anthropic()
     try:
         response = client.beta.messages.create(
-            model=MODEL,
+            model=CLAUDE_MODEL,
             max_tokens=16000,
             system=[
                 {"type": "text", "text": instructions},
@@ -169,19 +191,72 @@ def _ask_claude(instructions, catalogue, content, schema):
         raise MatchError("Claude returned an unreadable answer. Try again.")
 
 
-def match_with_claude(catalogue, text, image_b64=None, media_type=None, customer_name=""):
-    content = _user_content(text, image_b64, media_type, "This photo is the shopper's list.", "Shopper's list:")
+def _ask_gemini(instructions, catalogue, prompt, image_b64, media_type, schema):
+    """Same request for Gemini, using JSON-schema structured output."""
+    from google import genai
+    from google.genai import errors, types
+
+    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    parts = []
+    if image_b64:
+        parts.append(types.Part.from_bytes(data=base64.b64decode(image_b64), mime_type=media_type))
+    parts.append(types.Part.from_text(text=prompt))
+    config = types.GenerateContentConfig(
+        system_instruction=instructions + "\n\n" + _catalogue_block(catalogue),
+        response_mime_type="application/json",
+        response_json_schema=schema,
+    )
+    response = None
+    for model in dict.fromkeys([GEMINI_MODEL, GEMINI_FALLBACK_MODEL]):
+        try:
+            response = client.models.generate_content(
+                model=model, contents=[types.Content(role="user", parts=parts)], config=config)
+            break
+        except errors.ClientError as e:
+            message = str(getattr(e, "message", "") or e)
+            if e.code == 404 and model != GEMINI_FALLBACK_MODEL:
+                continue  # this key can't use the pinned model; try Google's latest-Flash alias
+            if "API key" in message or e.code in (401, 403):
+                raise MatchError("The Gemini API key is invalid. Check GEMINI_API_KEY.")
+            if e.code == 429:
+                raise MatchError("Gemini is rate limited or out of quota right now. Try again in a minute.")
+            raise MatchError(f"Gemini could not read this: {message}")
+        except errors.APIError as e:
+            raise MatchError(f"Gemini returned an error ({getattr(e, 'code', '?')}). Try again.")
+        except Exception:
+            raise MatchError("Could not reach Gemini. Check the internet connection.")
+
+    text_out = (response.text or "") if response else ""
+    if not text_out:
+        reason = ""
+        if response and response.candidates:
+            reason = str(response.candidates[0].finish_reason or "")
+        if "MAX_TOKENS" in reason:
+            raise MatchError("This is too long to read in one go. Split it into two.")
+        raise MatchError("Gemini declined to read this.")
+    try:
+        return json.loads(text_out)
+    except ValueError:
+        raise MatchError("Gemini returned an unreadable answer. Try again.")
+
+
+def _ask_ai(instructions, catalogue, prompt, image_b64, media_type, schema):
+    ask = _ask_claude if ai_provider() == "claude" else _ask_gemini
+    return ask(instructions, catalogue, prompt, image_b64, media_type, schema)
+
+
+def match_with_ai(catalogue, text, image_b64=None, media_type=None, customer_name=""):
+    prompt = _prompt(text, image_b64, "This photo is the shopper's list.", "Shopper's list:")
     if customer_name:
-        content.append({"type": "text", "text": f"Customer's name: {customer_name}"})
-    return _ask_claude(LIST_INSTRUCTIONS, catalogue, content, LIST_SCHEMA)
+        prompt += f"\n\nCustomer's name: {customer_name}"
+    return _ask_ai(LIST_INSTRUCTIONS, catalogue, prompt, image_b64, media_type, LIST_SCHEMA)
 
 
 def extract_catalogue(catalogue, text, image_b64=None, media_type=None):
     if not ai_enabled():
-        raise MatchError("Reading bills needs Claude. Add ANTHROPIC_API_KEY, or upload a CSV instead.")
-    content = _user_content(text, image_b64, media_type, "This photo is a supplier bill or price list.",
-                            "Supplier bill or price list:")
-    return _ask_claude(CATALOGUE_INSTRUCTIONS, catalogue, content, CATALOGUE_SCHEMA)["items"]
+        raise MatchError("Reading bills needs an AI key (GEMINI_API_KEY or ANTHROPIC_API_KEY), or upload a CSV instead.")
+    prompt = _prompt(text, image_b64, "This photo is a supplier bill or price list.", "Supplier bill or price list:")
+    return _ask_ai(CATALOGUE_INSTRUCTIONS, catalogue, prompt, image_b64, media_type, CATALOGUE_SCHEMA)["items"]
 
 
 # ---------- offline fallback ----------
@@ -274,9 +349,9 @@ def match_offline(catalogue, text):
 def match_list(catalogue, text, image_b64=None, media_type=None, customer_name=""):
     """Returns {items, language, reply_opening, reply_closing, engine}."""
     if ai_enabled():
-        result = match_with_claude(catalogue, text, image_b64, media_type, customer_name)
-        return {**result, "engine": "claude"}
+        result = match_with_ai(catalogue, text, image_b64, media_type, customer_name)
+        return {**result, "engine": ai_provider()}
     if image_b64:
-        raise MatchError("Reading photos needs Claude. Add ANTHROPIC_API_KEY, or type the list instead.")
+        raise MatchError("Reading photos needs an AI key (GEMINI_API_KEY or ANTHROPIC_API_KEY). Type the list instead.")
     return {"items": match_offline(catalogue, text), "language": "", "reply_opening": "",
             "reply_closing": "", "engine": "offline"}

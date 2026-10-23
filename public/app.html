@@ -35,7 +35,7 @@
     <!-- NEW QUOTE -->
     <section id="view-quote" class="view">
       <ol class="how" id="journey" aria-label="How PADOSI works">
-        <li data-step="read"><span class="role ai">Claude</span><b>Reads the list</b><span class="muted small">Kannada, Hindi, English, handwriting. Matches each item to your catalogue and says how sure it is.</span></li>
+        <li data-step="read"><span class="role ai"><span data-ai-name>AI</span></span><b>Reads the list</b><span class="muted small">Kannada, Hindi, English, handwriting. Matches each item to your catalogue and says how sure it is.</span></li>
         <li data-step="price"><span class="role script">Script</span><b>Prices it</b><span class="muted small">Totals and stock checks are plain arithmetic. AI never touches the money.</span></li>
         <li data-step="approve"><span class="role you">You</span><b>Approve in one tap</b><span class="muted small">Fix anything flagged, then send the reply, written in the shopper's language.</span></li>
       </ol>
@@ -78,7 +78,7 @@
       <div id="working" class="card reading" hidden>
         <div class="scan" id="scanBox" aria-hidden="true"></div>
         <div>
-          <strong id="readTitle">Claude is reading the list</strong>
+          <strong id="readTitle">Reading the list</strong>
           <ul class="checks" id="readSteps">
             <li><span class="tick"></span>Reading every line, in any language</li>
             <li><span class="tick"></span>Matching items to your catalogue</li>
@@ -107,8 +107,8 @@
       <div class="card">
         <div class="card-head wrap">
           <div>
-            <h2>Add items from a supplier bill <span class="role ai">Claude</span></h2>
-            <p class="muted small">Photograph a distributor bill or price list, or paste one. Claude turns it into catalogue items with the Kannada and Hindi names shoppers use, and updates prices and stock for items you already have. You check every row before it's saved.</p>
+            <h2>Add items from a supplier bill <span class="role ai"><span data-ai-name>AI</span></span></h2>
+            <p class="muted small">Photograph a distributor bill or price list, or paste one. <span data-ai-name>AI</span> turns it into catalogue items with the Kannada and Hindi names shoppers use, and updates prices and stock for items you already have. You check every row before it's saved.</p>
           </div>
         </div>
         <textarea id="billText" rows="4" placeholder="Toor dal 1kg  MRP 170  qty 10&#10;Gold Winner oil 1L pouch  158  x 12&#10;Parle-G 250g  25  x 24"></textarea>
@@ -125,7 +125,7 @@
         </div>
         <p id="billError" class="error" hidden></p>
         <div id="billWorking" class="working" style="margin-top:14px" hidden>
-          <div class="spinner"></div><div class="muted small">Claude is reading the bill…</div>
+          <div class="spinner"></div><div class="muted small"><span data-ai-name>AI</span> is reading the bill…</div>
         </div>
         <div id="billResult" hidden></div>
       </div>

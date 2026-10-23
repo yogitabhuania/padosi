@@ -50,6 +50,12 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- which AI is connected ----------
+
+const AI_NAMES = { claude: "Claude", gemini: "Gemini" };
+const aiOn = () => !!state.health && state.health.ai !== "offline";
+const aiName = () => state.health?.ai_name || "AI";
+
 // ---------- motion ----------
 
 const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -211,14 +217,14 @@ function showComposeError(msg) {
   if (msg) replay($("#composer"), "shake", 450);
 }
 
-// While Claude works, the list is "scanned" and the three steps tick off. The last step only
+// While the AI works, the list is "scanned" and the three steps tick off. The last step only
 // completes when the real answer arrives.
 async function playReading(text, photoUrl, request) {
   const box = $("#scanBox"), steps = $$("#readSteps li");
   box.classList.remove("ok");
   box.innerHTML = photoUrl ? `<img src="${photoUrl}" alt="">` : esc(text.slice(0, 260));
   steps.forEach((li) => li.classList.remove("on", "doing"));
-  $("#readTitle").textContent = state.health?.ai === "claude" ? "Claude is reading the list" : "Reading the list (offline matcher)";
+  $("#readTitle").textContent = aiOn() ? `${aiName()} is reading the list` : "Reading the list (offline matcher)";
   setJourney("read");
   let finished = false;
   request.finally(() => (finished = true)).catch(() => {});
@@ -340,9 +346,9 @@ function renderReview(animate = false) {
   setJourney("approve");
   const flagged = o.lines.filter((l) => l.flags.length);
   const problems = o.lines.filter((l) => l.flags.some((f) => FLAG_INFO[f]?.cls === "danger"));
-  const engine = o.engine === "claude"
-    ? `<span class="role ai">Claude</span> read this list`
-    : `Read by the basic offline matcher (Claude not connected)`;
+  const engine = o.engine && o.engine !== "offline"
+    ? `<span class="role ai">${esc(AI_NAMES[o.engine] || o.engine)}</span> read this list`
+    : `Read by the basic offline matcher (AI not connected)`;
   const lang = o.reply_language && o.reply_language !== "english"
     ? ` · reply drafted in ${o.reply_language[0].toUpperCase()}${o.reply_language.slice(1)}` : "";
 
@@ -438,7 +444,7 @@ function renderLine(l, idx) {
 function confidenceTag(c) {
   const pct = Math.round((c ?? 1) * 100);
   const cls = pct >= 90 ? "high" : pct < 75 ? "low" : "";
-  return `<span class="conf ${cls}" title="How sure Claude is about this match">${pct}% sure</span>`;
+  return `<span class="conf ${cls}" title="How sure the AI is about this match">${pct}% sure</span>`;
 }
 
 function linesPayload() {
@@ -750,7 +756,7 @@ $("#resetCat").addEventListener("click", async () => {
   }
 });
 
-// ---------- supplier bill → catalogue (Claude) ----------
+// ---------- supplier bill → catalogue (AI) ----------
 
 const bill = { photo: null, rows: [] };
 const CATEGORIES = ["Staples", "Pulses", "Oils", "Dairy", "Vegetables", "Fruits", "Masala", "Beverages",
@@ -793,7 +799,7 @@ $("#readBill").addEventListener("click", async () => {
       body: { text, image_base64: bill.photo?.base64 || null, media_type: bill.photo?.mediaType || null },
     });
     bill.rows = res.items.map((r) => ({ ...r, keep: true }));
-    if (!bill.rows.length) showBillError("Claude didn't find any products in that. Try a clearer photo.");
+    if (!bill.rows.length) showBillError(`${aiName()} didn't find any products in that. Try a clearer photo.`);
     else {
       renderBillRows();
       replay($("#billResult"), "enter", 2000);
@@ -882,12 +888,13 @@ function renderBillRows() {
     state.health = h;
     $("#storeName").textContent = h.store_name;
     const status = $("#aiStatus");
-    status.classList.toggle("off", h.ai !== "claude");
-    status.querySelector("span").textContent = h.ai === "claude" ? "Claude live" : "Claude off";
-    status.title = h.ai === "claude" ? `Reading lists with ${h.model}` : "No Claude API key set";
+    status.classList.toggle("off", !aiOn());
+    status.querySelector("span").textContent = aiOn() ? `${aiName()} live` : "AI off";
+    status.title = aiOn() ? `Reading lists with ${h.model}` : "No AI key set";
+    $$("[data-ai-name]").forEach((el) => (el.textContent = aiName()));
     status.hidden = false;
     const notes = [];
-    if (h.ai !== "claude") notes.push("Demo mode: no Claude API key set, so typed lists use a basic matcher and photos are off.");
+    if (!aiOn()) notes.push("Demo mode: no AI key set, so typed lists use a basic matcher and photos are off.");
     if (!h.storage.persistent) notes.push("Data is temporary on this deployment. Connect a Postgres database to keep it.");
     if (notes.length) {
       $("#banner").textContent = notes.join(" ");

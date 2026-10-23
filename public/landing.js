@@ -157,6 +157,11 @@
   fw.innerHTML = [...fw.textContent].map((ch, i) => `<span style="--i:${i}">${ch}</span>`).join("");
   new IntersectionObserver(([e], o) => { if (e.isIntersecting) { fw.classList.add("in"); o.disconnect(); } }, { threshold: 0.3 }).observe(fw);
 
+  /* ---------- name whichever AI the order desk is using ---------- */
+  fetch("/api/health").then((r) => r.json()).then((h) => {
+    if (h.ai && h.ai !== "offline") $$("[data-ai-name]").forEach((el) => (el.textContent = h.ai_name));
+  }).catch(() => {});
+
   /* ---------- main loop ---------- */
   const progressBar = $(".progress i");
   const spy = $$('.nav nav a[href^="#"]').map((a) => ({ a, s: $(a.getAttribute("href")) }));

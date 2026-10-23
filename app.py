@@ -96,8 +96,9 @@ def health():
     return {
         "ok": True,
         "store_name": STORE_NAME,
-        "ai": "claude" if matcher.ai_enabled() else "offline",
-        "model": matcher.MODEL if matcher.ai_enabled() else None,
+        "ai": matcher.ai_provider() or "offline",
+        "ai_name": matcher.ai_name(),
+        "model": matcher.ai_model(),
         "storage": db.storage_info(),
         "commit": os.environ.get("VERCEL_GIT_COMMIT_SHA", "")[:7] or None,
     }
