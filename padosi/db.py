@@ -63,7 +63,9 @@ def _connect():
         import psycopg
         from psycopg.rows import dict_row
 
-        return psycopg.connect(DATABASE_URL, row_factory=dict_row, autocommit=False)
+        # Neon's pooled URL goes through PgBouncer, which doesn't keep prepared statements
+        # between transactions, so never let psycopg prepare them.
+        return psycopg.connect(DATABASE_URL, row_factory=dict_row, autocommit=False, prepare_threshold=None)
     conn = sqlite3.connect(SQLITE_PATH)
     conn.row_factory = sqlite3.Row
     return conn
