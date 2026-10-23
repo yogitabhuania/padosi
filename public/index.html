@@ -19,8 +19,10 @@
         <div class="brand-name">PADOSI</div>
         <div class="brand-store" id="storeName">Kirana</div>
       </div>
+      <span id="aiStatus" class="ai-status" hidden><i></i><span></span></span>
     </div>
     <nav class="tabs" role="tablist">
+      <span class="tab-pill" aria-hidden="true"></span>
       <button class="tab active" data-view="quote" role="tab">New quote</button>
       <button class="tab" data-view="orders" role="tab">Orders</button>
       <button class="tab" data-view="catalogue" role="tab">Catalogue</button>
@@ -32,10 +34,10 @@
   <main>
     <!-- NEW QUOTE -->
     <section id="view-quote" class="view">
-      <ol class="how" aria-label="How PADOSI works">
-        <li><span class="role ai">Claude</span><b>Reads the list</b><span class="muted small">Kannada, Hindi, English, handwriting. Matches each item to your catalogue and says how sure it is.</span></li>
-        <li><span class="role script">Script</span><b>Prices it</b><span class="muted small">Totals and stock checks are plain arithmetic. AI never touches the money.</span></li>
-        <li><span class="role you">You</span><b>Approve in one tap</b><span class="muted small">Fix anything flagged, then send the reply, written in the shopper's language.</span></li>
+      <ol class="how" id="journey" aria-label="How PADOSI works">
+        <li data-step="read"><span class="role ai">Claude</span><b>Reads the list</b><span class="muted small">Kannada, Hindi, English, handwriting. Matches each item to your catalogue and says how sure it is.</span></li>
+        <li data-step="price"><span class="role script">Script</span><b>Prices it</b><span class="muted small">Totals and stock checks are plain arithmetic. AI never touches the money.</span></li>
+        <li data-step="approve"><span class="role you">You</span><b>Approve in one tap</b><span class="muted small">Fix anything flagged, then send the reply, written in the shopper's language.</span></li>
       </ol>
 
       <div id="composer" class="card">
@@ -73,11 +75,15 @@
         <p id="composeError" class="error" hidden></p>
       </div>
 
-      <div id="working" class="card working" hidden>
-        <div class="spinner"></div>
+      <div id="working" class="card reading" hidden>
+        <div class="scan" id="scanBox" aria-hidden="true"></div>
         <div>
-          <strong>Reading the list…</strong>
-          <div class="muted small">Matching items to your catalogue and pricing them</div>
+          <strong id="readTitle">Claude is reading the list</strong>
+          <ul class="checks" id="readSteps">
+            <li><span class="tick"></span>Reading every line, in any language</li>
+            <li><span class="tick"></span>Matching items to your catalogue</li>
+            <li><span class="tick"></span>Pricing and checking stock</li>
+          </ul>
         </div>
       </div>
 

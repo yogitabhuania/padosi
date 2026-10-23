@@ -50,6 +50,66 @@ function esc(s) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 }
 
+// ---------- motion ----------
+
+const REDUCED = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const wait = (ms) => new Promise((r) => setTimeout(r, REDUCED ? 0 : ms));
+const easeOut = (t) => 1 - Math.pow(1 - t, 3);
+
+// Numbers count up once when they first appear (totals, stats).
+function countUp(el, value, format, ms = 900) {
+  if (!el) return;
+  if (REDUCED || !value) { el.textContent = format(value); return; }
+  const t0 = performance.now();
+  const step = (now) => {
+    const k = Math.min(1, (now - t0) / ms);
+    el.textContent = format(value * easeOut(k));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// Re-run a one-shot CSS animation class.
+function replay(el, cls, ms = 900) {
+  if (!el) return;
+  el.classList.remove(cls);
+  void el.offsetWidth;
+  el.classList.add(cls);
+  setTimeout(() => el.classList.remove(cls), ms);
+}
+
+function spotlight(els) {
+  els.forEach((el) => {
+    if (el.classList.contains("spot")) return;
+    el.classList.add("spot");
+    el.addEventListener("pointermove", (e) => {
+      const r = el.getBoundingClientRect();
+      el.style.setProperty("--mx", `${e.clientX - r.left}px`);
+      el.style.setProperty("--my", `${e.clientY - r.top}px`);
+    });
+  });
+}
+
+function moveTabPill() {
+  const active = $(".tab.active"), pill = $(".tab-pill");
+  if (!active || !pill) return;
+  pill.style.width = `${active.offsetWidth}px`;
+  pill.style.transform = `translateX(${active.offsetLeft}px)`;
+}
+addEventListener("resize", moveTabPill);
+
+// The "how it works" strip doubles as the order's progress: read → price → approve.
+function setJourney(stage) {
+  const order = ["read", "price", "approve"];
+  const strip = $("#journey");
+  strip.classList.toggle("live", stage !== null);
+  $$("#journey li").forEach((li) => {
+    const i = order.indexOf(li.dataset.step), at = stage === "done" ? 3 : order.indexOf(stage);
+    li.classList.toggle("done", stage !== null && i < at);
+    li.classList.toggle("now", stage !== null && i === at);
+  });
+}
+
 function toast(msg) {
   const t = $("#toast");
   t.textContent = msg;
@@ -76,7 +136,12 @@ function fmtSeconds(s) {
 
 function showView(name) {
   $$(".tab").forEach((t) => t.classList.toggle("active", t.dataset.view === name));
-  $$(".view").forEach((v) => (v.hidden = v.id !== `view-${name}`));
+  moveTabPill();
+  $$(".view").forEach((v) => {
+    const show = v.id === `view-${name}`;
+    if (show && v.hidden) replay(v, "entering", 1200);
+    v.hidden = !show;
+  });
   if (name === "orders") loadOrders();
   if (name === "catalogue") loadCatalogue().then(renderCatalogue);
   window.scrollTo({ top: 0 });
@@ -143,6 +208,33 @@ function showComposeError(msg) {
   const el = $("#composeError");
   el.textContent = msg;
   el.hidden = !msg;
+  if (msg) replay($("#composer"), "shake", 450);
+}
+
+// While Claude works, the list is "scanned" and the three steps tick off. The last step only
+// completes when the real answer arrives.
+async function playReading(text, photoUrl, request) {
+  const box = $("#scanBox"), steps = $$("#readSteps li");
+  box.classList.remove("ok");
+  box.innerHTML = photoUrl ? `<img src="${photoUrl}" alt="">` : esc(text.slice(0, 260));
+  steps.forEach((li) => li.classList.remove("on", "doing"));
+  $("#readTitle").textContent = state.health?.ai === "claude" ? "Claude is reading the list" : "Reading the list (offline matcher)";
+  setJourney("read");
+  let finished = false;
+  request.finally(() => (finished = true)).catch(() => {});
+  for (let i = 0; i < steps.length; i++) {
+    steps[i].classList.add("doing");
+    if (i < steps.length - 1) {
+      await wait(i === 0 ? 450 : 550);
+      if (i === 0) setJourney("price");
+    } else {
+      await request;
+    }
+    steps[i].classList.replace("doing", "on");
+  }
+  box.classList.add("ok");
+  await wait(250);
+  return request;
 }
 
 $("#makeQuote").addEventListener("click", async () => {
@@ -153,7 +245,7 @@ $("#makeQuote").addEventListener("click", async () => {
   $("#composer").hidden = true;
   $("#working").hidden = false;
   try {
-    const [order] = await Promise.all([
+    const request = Promise.all([
       api("/api/quote", {
         method: "POST",
         body: {
@@ -167,8 +259,11 @@ $("#makeQuote").addEventListener("click", async () => {
       }),
       state.catalogue.length ? null : loadCatalogue(),
     ]);
+    const [order] = await playReading(text, state.photo?.url, request);
+    state.freshOrder = order.id;
     openOrder(order);
   } catch (err) {
+    setJourney(null);
     $("#composer").hidden = false;
     showComposeError(err.message);
   } finally {
@@ -188,6 +283,8 @@ function resetComposer() {
   $("#review").hidden = true;
   $("#composer").hidden = false;
   showComposeError("");
+  setJourney(null);
+  replay($("#composer"), "entering-card", 900);
 }
 
 // ---------- review ----------
@@ -217,9 +314,9 @@ async function openOrder(order) {
   $("#review").hidden = false;
   if (order.status === "approved") {
     stopTimer();
-    renderApproved();
+    renderApproved(false);
   } else {
-    renderReview();
+    renderReview(true);
     startTimer();
   }
 }
@@ -238,8 +335,9 @@ function catalogueOptions(selected) {
   return html;
 }
 
-function renderReview() {
+function renderReview(animate = false) {
   const o = state.order;
+  setJourney("approve");
   const flagged = o.lines.filter((l) => l.flags.length);
   const problems = o.lines.filter((l) => l.flags.some((f) => FLAG_INFO[f]?.cls === "danger"));
   const engine = o.engine === "claude"
@@ -257,14 +355,14 @@ function renderReview() {
         </div>
         <button class="ghost small-btn" id="startOver">Start over</button>
       </div>
-      <div class="summary">
+      <div class="summary${animate ? " enter" : ""}">
         <span class="pill neutral">${o.lines.length} item${o.lines.length === 1 ? "" : "s"}</span>
         ${flagged.length
           ? `<span class="pill warn">⚑ ${flagged.length} need${flagged.length === 1 ? "s" : ""} a look</span>`
           : `<span class="pill ok">✓ All items matched</span>`}
         ${problems.length ? `<span class="pill danger">${problems.length} can't be supplied as is</span>` : ""}
       </div>
-      <div class="lines">
+      <div class="lines${animate ? " enter" : ""}">
         <div class="line-head"><span>Item</span><span>Qty</span><span>Price (₹)</span><span>Amount</span><span></span></div>
         ${o.lines.map(renderLine).join("")}
       </div>
@@ -281,6 +379,7 @@ function renderReview() {
       ${o.raw_text ? `<details style="margin-top:14px"><summary class="muted small">Original list</summary><div class="message-box">${esc(o.raw_text)}</div></details>` : ""}
     </div>`;
 
+  if (animate) countUp($("#grandTotal"), o.total, rupees, 1100);
   $("#startOver").onclick = resetComposer;
   $("#addLine").onclick = () => {
     o.lines.push({ line_id: null, raw: "", catalogue_id: "", quantity: 1, unit_price: null, confidence: 1, note: "", reviewed: true, flags: ["unmatched"] });
@@ -317,7 +416,7 @@ function renderLine(l, idx) {
   const flags = l.flags.map((f) => `<span class="pill ${FLAG_INFO[f].cls}">${FLAG_INFO[f].label}</span>`).join("");
   const priceChanged = l.catalogue_price != null && l.unit_price !== l.catalogue_price;
   return `
-    <div class="line ${cls}" data-idx="${idx}">
+    <div class="line ${cls}" data-idx="${idx}" style="--i:${idx}">
       <div class="item-cell">
         ${l.raw ? `<div class="raw">Asked: <b>${esc(l.raw)}</b></div>` : ""}
         <select aria-label="Item">${catalogueOptions(l.catalogue_id)}</select>
@@ -372,15 +471,17 @@ async function approve() {
   const problems = o.lines.filter((l) => l.flags.includes("low_confidence") || l.flags.includes("out_of_stock"));
   if (problems.length && !confirm(`${problems.length} flagged item${problems.length === 1 ? " is" : "s are"} still in the quote. Approve anyway?`)) return;
   $("#approveBtn").disabled = true;
+  $("#approveBtn").classList.add("busy");
   await saving;
   try {
     state.order = await api(`/api/orders/${o.id}/approve`, { method: "POST", body: { lines: linesPayload() } });
     stopTimer();
-    renderApproved();
+    renderApproved(true);
     loadCatalogue(); // stock changed
   } catch (err) {
     toast(err.message);
     $("#approveBtn").disabled = false;
+    $("#approveBtn").classList.remove("busy");
   }
 }
 
@@ -390,11 +491,12 @@ function waLink(o) {
   return `https://wa.me/${phone}?text=${encodeURIComponent(o.message)}`;
 }
 
-function renderApproved() {
+function renderApproved(animate = false) {
   const o = state.order;
   const secs = o.seconds_to_approve;
+  setJourney("done");
   $("#review").innerHTML = `
-    <div class="card">
+    <div class="card${animate ? " done-card" : ""}">
       <div class="done-hero">
         <div class="tick">✓</div>
         <div>
@@ -402,7 +504,10 @@ function renderApproved() {
           <div class="muted small">${secs != null ? `List to approved quote in <b>${fmtSeconds(secs)}</b>${secs <= 60 ? " — under a minute 🎉" : ""}` : "Approved"} · ${esc(o.customer_name || "walk-in customer")}</div>
         </div>
       </div>
-      <div class="message-box" id="msgBox">${esc(o.message)}</div>
+      <div class="receipt-slot ${animate ? "" : "static"}" id="receipt">
+        <div class="message-box" id="msgBox">${esc(o.message)}</div>
+        <span class="stamp">APPROVED</span>
+      </div>
       <div class="actions" style="margin-top:14px">
         <button class="primary" id="copyMsg">Copy for WhatsApp</button>
         <a class="ghost" id="openWa" href="${waLink(o)}" target="_blank" rel="noopener" style="text-align:center">Open WhatsApp</a>
@@ -411,6 +516,11 @@ function renderApproved() {
       ${fieldTestHtml(o)}
     </div>`;
   bindFieldTest(o);
+  if (animate) {
+    const slot = $("#receipt");
+    slot.classList.add("printing");
+    wait(1300).then(() => slot.classList.replace("printing", "printed"));
+  }
   $("#copyMsg").onclick = async () => {
     try {
       await navigator.clipboard.writeText(o.message);
@@ -438,7 +548,7 @@ function fieldTestHtml(o) {
           <div><div class="muted small">By hand</div><div class="v">${fmtSeconds(o.manual_seconds)}</div></div>
           <div><div class="muted small">With PADOSI</div><div class="v">${fmtSeconds(o.seconds_to_approve)}</div></div>
         </div>
-        <div class="muted small" style="margin-top:8px">${saved > 0 ? `Saved ${fmtSeconds(saved)} on this order.` : "No time saved on this order."} <button class="link" id="ftRedo">Redo</button></div>
+        <div class="muted small saved-line" style="margin-top:8px">${saved > 0 ? `Saved ${fmtSeconds(saved)} on this order.` : "No time saved on this order."} <button class="link" id="ftRedo">Redo</button></div>
       </div>`;
   }
   return `
@@ -507,8 +617,8 @@ function renderStats(s) {
   const tiles = [
     ["Avg. list → quote", fmtSeconds(s.avg_seconds_to_approve)],
     ["Under a minute", s.orders_approved ? `${s.under_a_minute} / ${s.orders_approved}` : "–"],
-    ["Approved today", s.approved_today],
-    ["Value approved", rupees(s.revenue_approved)],
+    ["Approved today", `<span data-count="${s.approved_today}" data-fmt="n">0</span>`],
+    ["Value approved", `<span data-count="${s.revenue_approved}" data-fmt="rs">₹0</span>`],
   ].map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`);
   if (s.paired_orders) {
     const n = s.paired_orders;
@@ -519,6 +629,9 @@ function renderStats(s) {
       </div>`);
   }
   $("#stats").innerHTML = tiles.join("");
+  $$("#stats [data-count]").forEach((el) =>
+    countUp(el, +el.dataset.count, el.dataset.fmt === "rs" ? rupees : (v) => String(Math.round(v))));
+  spotlight($$("#stats .stat"));
 }
 
 function renderOrders(orders) {
@@ -673,6 +786,7 @@ $("#readBill").addEventListener("click", async () => {
   $("#billResult").hidden = true;
   $("#billWorking").hidden = false;
   $("#readBill").disabled = true;
+  $("#readBill").classList.add("busy");
   try {
     const res = await api("/api/catalogue/extract", {
       method: "POST",
@@ -680,12 +794,16 @@ $("#readBill").addEventListener("click", async () => {
     });
     bill.rows = res.items.map((r) => ({ ...r, keep: true }));
     if (!bill.rows.length) showBillError("Claude didn't find any products in that. Try a clearer photo.");
-    else renderBillRows();
+    else {
+      renderBillRows();
+      replay($("#billResult"), "enter", 2000);
+    }
   } catch (err) {
     showBillError(err.message);
   } finally {
     $("#billWorking").hidden = true;
     $("#readBill").disabled = false;
+    $("#readBill").classList.remove("busy");
   }
 });
 
@@ -706,7 +824,7 @@ function renderBillRows() {
             const unsure = r.confidence < 0.75 || !r.price
               ? `<span class="pill warn tag">${r.price ? "Check" : "Add price"}</span>` : "";
             return `
-            <tr data-i="${i}">
+            <tr data-i="${i}" style="--i:${i}">
               <td><input type="checkbox" data-f="keep" ${r.keep ? "checked" : ""} aria-label="Include"></td>
               <td><input data-f="name" value="${esc(r.name)}"></td>
               <td><input data-f="aliases" value="${esc(r.aliases)}"></td>
@@ -763,6 +881,11 @@ function renderBillRows() {
     const h = await api("/api/health");
     state.health = h;
     $("#storeName").textContent = h.store_name;
+    const status = $("#aiStatus");
+    status.classList.toggle("off", h.ai !== "claude");
+    status.querySelector("span").textContent = h.ai === "claude" ? "Claude live" : "Claude off";
+    status.title = h.ai === "claude" ? `Reading lists with ${h.model}` : "No Claude API key set";
+    status.hidden = false;
     const notes = [];
     if (h.ai !== "claude") notes.push("Demo mode: no Claude API key set, so typed lists use a basic matcher and photos are off.");
     if (!h.storage.persistent) notes.push("Data is temporary on this deployment. Connect a Postgres database to keep it.");
@@ -776,3 +899,7 @@ function renderBillRows() {
   }
   loadCatalogue().catch(() => {});
 })();
+
+moveTabPill();
+if (document.fonts) document.fonts.ready.then(moveTabPill);
+spotlight($$("#journey li"));
