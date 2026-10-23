@@ -114,9 +114,17 @@ Return one entry per product (skip headers, totals, taxes, discounts and deliver
 def ai_provider():
     if os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("ANTHROPIC_AUTH_TOKEN"):
         return "claude"
-    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+    if _gemini_key():
         return "gemini"
     return None
+
+
+# GEMINI_API_KEY is the documented name; the others catch keys saved under a looser name.
+GEMINI_KEY_NAMES = ("GEMINI_API_KEY", "GOOGLE_API_KEY", "GEMINI_KEY", "GEMINI", "gemini", "gemini_api_key")
+
+
+def _gemini_key():
+    return next((os.environ[n].strip() for n in GEMINI_KEY_NAMES if os.environ.get(n, "").strip()), None)
 
 
 def ai_enabled():
@@ -196,7 +204,7 @@ def _ask_gemini(instructions, catalogue, prompt, image_b64, media_type, schema):
     from google import genai
     from google.genai import errors, types
 
-    client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"))
+    client = genai.Client(api_key=_gemini_key())
     parts = []
     if image_b64:
         parts.append(types.Part.from_bytes(data=base64.b64decode(image_b64), mime_type=media_type))
