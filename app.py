@@ -99,6 +99,7 @@ def health():
         "ai": "claude" if matcher.ai_enabled() else "offline",
         "model": matcher.MODEL if matcher.ai_enabled() else None,
         "storage": db.storage_info(),
+        "commit": os.environ.get("VERCEL_GIT_COMMIT_SHA", "")[:7] or None,
     }
 
 
