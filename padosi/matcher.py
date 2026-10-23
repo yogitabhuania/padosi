@@ -225,7 +225,11 @@ def _ask_gemini(instructions, catalogue, prompt, image_b64, media_type, schema):
             if e.code == 404 and model != GEMINI_FALLBACK_MODEL:
                 continue  # this key can't use the pinned model; try Google's latest-Flash alias
             if "API key" in message or e.code in (401, 403):
-                raise MatchError("The Gemini API key is invalid. Check GEMINI_API_KEY.")
+                key = _gemini_key() or ""
+                # A fingerprint (first 4 characters and length) shows which key is in use without revealing it.
+                raise MatchError(
+                    f"Google rejected the Gemini key ({key[:4]}…, {len(key)} characters). "
+                    f"Google said: {message[:160]}")
             if e.code == 429:
                 raise MatchError("Gemini is rate limited or out of quota right now. Try again in a minute.")
             raise MatchError(f"Gemini could not read this: {message}")
