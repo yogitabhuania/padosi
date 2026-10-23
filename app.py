@@ -349,11 +349,20 @@ def edit_catalogue_item(item_id: str, edit: CatalogueEdit):
 PUBLIC = Path(__file__).resolve().parent / "public"
 
 
-@app.get("/")
-def index():
-    page = PUBLIC / "index.html"
+def _page(name):
+    page = PUBLIC / name
     # On Vercel public/ lives on the CDN and may not be bundled with the function.
-    return FileResponse(page) if page.exists() else RedirectResponse("/index.html")
+    return FileResponse(page) if page.exists() else RedirectResponse(f"/{name}")
+
+
+@app.get("/")
+def landing():
+    return _page("index.html")
+
+
+@app.get("/app")
+def order_desk():
+    return _page("app.html")
 
 
 # On Vercel the CDN serves public/ before requests reach this app; locally the app serves it.

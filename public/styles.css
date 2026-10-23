@@ -429,3 +429,4 @@ textarea:focus, input:focus { box-shadow: 0 0 0 4px color-mix(in srgb, var(--bra
 .receipt-slot.static .stamp { opacity: .9; }
 .entering-card { animation: rise var(--dur-slow) var(--ease-spring) both; }
 #billResult.enter tbody tr { animation: rise .6s var(--ease-spring) both; animation-delay: calc(var(--i, 0) * 60ms); }
+.logo { text-decoration: none; }

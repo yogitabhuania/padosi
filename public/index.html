@@ -3,153 +3,180 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>PADOSI · Kirana quotes</title>
-  <meta name="description" content="Turn a shopper's WhatsApp list into a priced, owner-approved quote in seconds.">
+  <title>PADOSI · WhatsApp lists to priced bills</title>
+  <meta name="description" content="PADOSI turns a shopper's messy WhatsApp list into a priced, owner-approved bill in under a minute. Built for Bengaluru kiranas.">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'><rect width='64' height='64' rx='14' fill='%231f5f45'/><text x='32' y='44' font-size='34' text-anchor='middle' fill='%23f4b942' font-family='Arial' font-weight='700'>P</text></svg>">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/styles.css">
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/landing.css">
 </head>
 <body>
-  <header class="topbar">
-    <div class="brand">
-      <span class="logo">P</span>
-      <div>
-        <div class="brand-name">PADOSI</div>
-        <div class="brand-store" id="storeName">Kirana</div>
-      </div>
-      <span id="aiStatus" class="ai-status" hidden><i></i><span></span></span>
-    </div>
-    <nav class="tabs" role="tablist">
-      <span class="tab-pill" aria-hidden="true"></span>
-      <button class="tab active" data-view="quote" role="tab">New quote</button>
-      <button class="tab" data-view="orders" role="tab">Orders</button>
-      <button class="tab" data-view="catalogue" role="tab">Catalogue</button>
+  <div class="progress" aria-hidden="true"><i></i></div>
+  <canvas id="grid" aria-hidden="true"></canvas>
+  <div class="vignette" aria-hidden="true"></div>
+
+  <header class="nav">
+    <a class="nav-brand" href="#top"><span class="logo">P</span>PADOSI</a>
+    <nav>
+      <a href="#how">How it works</a>
+      <a href="#match">Speed</a>
+      <a href="#trust">Trust</a>
+      <a href="#why">Why PADOSI</a>
     </nav>
+    <a class="navcta" href="/app">Open order desk</a>
   </header>
 
-  <div id="banner" class="banner" hidden></div>
-
-  <main>
-    <!-- NEW QUOTE -->
-    <section id="view-quote" class="view">
-      <ol class="how" id="journey" aria-label="How PADOSI works">
-        <li data-step="read"><span class="role ai">Claude</span><b>Reads the list</b><span class="muted small">Kannada, Hindi, English, handwriting. Matches each item to your catalogue and says how sure it is.</span></li>
-        <li data-step="price"><span class="role script">Script</span><b>Prices it</b><span class="muted small">Totals and stock checks are plain arithmetic. AI never touches the money.</span></li>
-        <li data-step="approve"><span class="role you">You</span><b>Approve in one tap</b><span class="muted small">Fix anything flagged, then send the reply, written in the shopper's language.</span></li>
-      </ol>
-
-      <div id="composer" class="card">
-        <h1>Paste a shopper's list</h1>
-        <p class="muted">Keep using your own WhatsApp. Copy the shopper's message here, or add a photo of a handwritten list. No new app for your customers.</p>
-
-        <div class="row two">
-          <label>Customer name<input id="custName" placeholder="e.g. Lakshmi aunty" autocomplete="off"></label>
-          <label>WhatsApp number<input id="custPhone" placeholder="98450 12345" inputmode="tel" autocomplete="off"></label>
+  <main id="top">
+    <!-- HERO -->
+    <section class="hero">
+      <div class="wrap">
+        <p class="eyebrow">For Bengaluru kiranas</p>
+        <h1 class="mega">Turn a messy WhatsApp list into a <span class="hl">priced bill</span> in under a minute.</h1>
+        <p class="lede">Shoppers already send lists on WhatsApp. PADOSI reads them in Kannada, Hindi or English, prices every item from your shelf, and gives you a bill to approve in one tap.</p>
+        <div class="cta-row">
+          <a class="btn pri" href="/app"><span>Open the order desk</span><span class="arr">→</span></a>
+          <a class="btn ghost" href="#how">See it work</a>
         </div>
+        <dl class="facts">
+          <div><dt data-count="3">0</dt><dd>languages read</dd></div>
+          <div><dt><span data-count="60">0</span>s</dt><dd>target per order</dd></div>
+          <div><dt data-count="0">0</dt><dd>new apps for shoppers</dd></div>
+          <div><dt data-count="1">0</dt><dd>tap to approve</dd></div>
+        </dl>
+      </div>
+      <div class="cue" aria-hidden="true"><span></span></div>
+    </section>
 
-        <label>List
-          <textarea id="listText" rows="7" placeholder="2 kg tamatar&#10;nandini haalu 2&#10;togari bele 1kg&#10;Amul 500&#10;kothambari soppu"></textarea>
-        </label>
+    <!-- RIBBON: lists as shoppers actually write them -->
+    <section class="ribbon" aria-label="Examples of shopper lists">
+      <div class="rrow" data-dir="-1"><div class="rtrack">
+        <span>2 kg tamatar</span><span>togari bele 1kg</span><span>ನಂದಿನಿ ಹಾಲು 2</span><span>Amul 500?</span><span>kothambari soppu</span><span>aata 5kg</span><span>हल्दी 100g</span><span>eerulli 2kg</span><span>maggi 2 packet</span>
+      </div></div>
+      <div class="rrow" data-dir="1"><div class="rtrack">
+        <span>₹60 Tomato ×2</span><span>₹168 Toor Dal</span><span>₹48 Nandini Milk ×2</span><span>₹29 Amul Taaza ✓</span><span>₹10 Coriander</span><span>₹285 Aashirvaad Atta</span><span>₹32 Turmeric</span><span>₹76 Onion ×2</span><span>₹112 Maggi ×2</span>
+      </div></div>
+    </section>
 
-        <div class="samples">
-          <span class="muted small">Try a sample:</span>
-          <button class="chip" data-sample="0">Kannada mix</button>
-          <button class="chip" data-sample="1">Hindi mix</button>
-          <button class="chip" data-sample="2">Messy WhatsApp</button>
-        </div>
-
-        <div class="photo-row">
-          <label class="photo-btn">
-            <input id="photoInput" type="file" accept="image/*" hidden>
-            <span>📷 &nbsp;Add photo of list</span>
-          </label>
-          <div id="photoPreview" class="photo-preview" hidden>
-            <img id="photoImg" alt="Shopper's list">
-            <button id="photoClear" class="link">Remove</button>
+    <!-- PRINTER: scroll prints the bill -->
+    <section class="printsec" id="how">
+      <div class="sticky">
+        <div class="wrap two">
+          <div>
+            <p class="eyebrow">How it works</p>
+            <h2 class="big">A scrawled list goes in. A checked bill comes out.</h2>
+            <ol class="flow">
+              <li data-at="0.05"><span class="role ai">Claude</span>Reads the list and matches each item to your catalogue</li>
+              <li data-at="0.4"><span class="role script">Script</span>Prices every line and checks stock. AI never touches money</li>
+              <li data-at="0.8"><span class="role you">You</span>Approve in one tap and send it on your own WhatsApp</li>
+            </ol>
+          </div>
+          <div class="stage">
+            <div class="chat">
+              <div class="chat-head"><span class="avatar">L</span>Lakshmi aunty <small>online</small></div>
+              <div class="bubble">Namaskara anna 🙏<br>2 kg tamatar<br>nandini haalu 2<br>togari bele 1kg<br>Amul 500<br>kothambari soppu</div>
+              <div class="scanbar" aria-hidden="true"></div>
+            </div>
+            <div class="printer" id="printer">
+              <div class="paper-clip">
+                <div class="receipt" id="receipt">
+                  <div class="r-head"><b>SRI LAKSHMI STORES</b><small>WhatsApp order · Lakshmi aunty</small></div>
+                  <ul class="r-lines">
+                    <li><span>Tomato 1 kg ×2</span><b>₹60</b></li>
+                    <li><span>Nandini Milk 500 ml ×2</span><b>₹48</b></li>
+                    <li><span>Toor Dal 1 kg</span><b>₹168</b></li>
+                    <li class="flag"><span>Amul Taaza 500 ml <em>checked</em></span><b>₹29</b></li>
+                    <li><span>Coriander 1 bunch</span><b>₹10</b></li>
+                  </ul>
+                  <div class="r-total"><span>TOTAL</span><b>₹315</b></div>
+                  <div class="r-foot">Reply YES to confirm · Packed right away</div>
+                  <span class="r-stamp">APPROVED</span>
+                </div>
+              </div>
+              <div class="slot"></div>
+            </div>
           </div>
         </div>
-
-        <button id="makeQuote" class="primary big">Make quote</button>
-        <p id="composeError" class="error" hidden></p>
       </div>
+    </section>
 
-      <div id="working" class="card reading" hidden>
-        <div class="scan" id="scanBox" aria-hidden="true"></div>
+    <!-- SPEED: scroll counts the time down -->
+    <section class="pathsec" id="match">
+      <div class="sticky">
+        <div class="wrap">
+          <p class="eyebrow">Speed</p>
+          <h2 class="big">Six minutes of reading, finding prices and adding up becomes one.</h2>
+          <div class="meter">
+            <div class="meter-top">
+              <span class="mono muted">time per WhatsApp order</span>
+              <span class="clock" id="clock">6:00</span>
+            </div>
+            <div class="bar"><i id="bar"></i></div>
+            <ol class="hops" id="hops">
+              <li>Read list</li><li>Match items</li><li>Price</li><li>Check stock</li><li>Approve</li>
+            </ol>
+            <p class="save" id="save"><b id="saved">0:00</b> saved on every order</p>
+            <p class="fine">Planning figures from our scope: about 6 min by hand vs about 1 min with PADOSI. We're timing real orders at Bengaluru kiranas with the app's built-in field test to confirm them.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- TRUST: checks tick in sequence -->
+    <section class="checksec" id="trust">
+      <div class="wrap two">
         <div>
-          <strong id="readTitle">Claude is reading the list</strong>
-          <ul class="checks" id="readSteps">
-            <li><span class="tick"></span>Reading every line, in any language</li>
-            <li><span class="tick"></span>Matching items to your catalogue</li>
-            <li><span class="tick"></span>Pricing and checking stock</li>
-          </ul>
+          <p class="eyebrow">Trust</p>
+          <h2 class="big">The AI reads. The owner decides.</h2>
+          <p class="lede small">AI handles only the messy language. Money, stock and the final say stay with plain arithmetic and the shopkeeper who knows the customer.</p>
         </div>
-      </div>
-
-      <div id="review" hidden></div>
-    </section>
-
-    <!-- ORDERS -->
-    <section id="view-orders" class="view" hidden>
-      <div id="stats" class="stats"></div>
-      <div class="card">
-        <div class="card-head">
-          <h2>Quotes</h2>
-          <button id="refreshOrders" class="ghost small-btn">Refresh</button>
+        <div class="checks spotlit" id="checks">
+          <div class="core">
+            <ul>
+              <li><span class="tick"></span><div><b>Every line matched with a confidence score</b><small>"Amul 500": milk or butter? Flagged, never guessed.</small></div></li>
+              <li><span class="tick"></span><div><b>Every rupee from your catalogue</b><small>Totals are arithmetic, not AI.</small></div></li>
+              <li><span class="tick"></span><div><b>Stock checked before the bill goes out</b><small>Out-of-stock and low-stock lines are marked.</small></div></li>
+              <li><span class="tick"></span><div><b>Owner approves every quote</b><small>Edit any line, then one tap.</small></div></li>
+            </ul>
+            <div class="verdict" id="verdict">✓ Ready to send on WhatsApp</div>
+          </div>
         </div>
-        <div id="ordersList"></div>
       </div>
     </section>
 
-    <!-- CATALOGUE -->
-    <section id="view-catalogue" class="view" hidden>
-      <div class="card">
-        <div class="card-head wrap">
-          <div>
-            <h2>Add items from a supplier bill <span class="role ai">Claude</span></h2>
-            <p class="muted small">Photograph a distributor bill or price list, or paste one. Claude turns it into catalogue items with the Kannada and Hindi names shoppers use, and updates prices and stock for items you already have. You check every row before it's saved.</p>
-          </div>
+    <!-- WHY: what's different from earlier attempts -->
+    <section class="why" id="why">
+      <div class="wrap">
+        <p class="eyebrow">Why PADOSI</p>
+        <h2 class="big">Not another delivery app. A faster counter.</h2>
+        <div class="tiles">
+          <article class="tile spotlit"><span class="mono num">01</span><h3>No new app for shoppers</h3><p>Customers keep messaging you on WhatsApp. Nothing for them to install.</p></article>
+          <article class="tile spotlit"><span class="mono num">02</span><h3>No marketplace, no commission</h3><p>Your customers stay yours. PADOSI is a tool, not a middleman.</p></article>
+          <article class="tile spotlit"><span class="mono num">03</span><h3>Set up from a bill photo</h3><p>Photograph a supplier bill and Claude builds your catalogue, with the Kannada and Hindi names shoppers use.</p></article>
+          <article class="tile spotlit"><span class="mono num">04</span><h3>Replies in their language</h3><p>The greeting and closing come back in the language the shopper wrote in. The bill lines stay exact.</p></article>
         </div>
-        <textarea id="billText" rows="4" placeholder="Toor dal 1kg  MRP 170  qty 10&#10;Gold Winner oil 1L pouch  158  x 12&#10;Parle-G 250g  25  x 24"></textarea>
-        <div class="photo-row">
-          <label class="photo-btn">
-            <input id="billPhoto" type="file" accept="image/*" hidden>
-            <span>📷 &nbsp;Add photo of bill</span>
-          </label>
-          <div id="billPreview" class="photo-preview" hidden>
-            <img id="billImg" alt="Supplier bill">
-            <button id="billClear" class="link">Remove</button>
-          </div>
-          <button id="readBill" class="primary">Read bill</button>
-        </div>
-        <p id="billError" class="error" hidden></p>
-        <div id="billWorking" class="working" style="margin-top:14px" hidden>
-          <div class="spinner"></div><div class="muted small">Claude is reading the bill…</div>
-        </div>
-        <div id="billResult" hidden></div>
       </div>
+    </section>
 
-      <div class="card">
-        <div class="card-head wrap">
-          <div>
-            <h2>Store catalogue</h2>
-            <p class="muted small" id="catCount"></p>
-          </div>
-          <div class="btn-group">
-            <label class="ghost small-btn file-btn">Upload CSV<input id="csvInput" type="file" accept=".csv,text/csv" hidden></label>
-            <a class="ghost small-btn" href="/api/catalogue.csv" download>Download CSV</a>
-            <button id="resetCat" class="ghost small-btn">Load sample</button>
-          </div>
+    <!-- FINAL CTA -->
+    <section class="final">
+      <div class="wrap">
+        <h2 class="mega">Paste a list. Watch the bill print.</h2>
+        <div class="cta-row center">
+          <a class="btn pri" href="/app"><span>Open the order desk</span><span class="arr">→</span></a>
         </div>
-        <p class="muted small">CSV columns: <code>id, name, aliases, category, unit, price, stock</code>. Only <code>name</code> and <code>price</code> are required. Separate aliases with <code>;</code> (e.g. <code>togari bele;tur dal</code>). Tap a price or stock figure to edit it.</p>
-        <input id="catSearch" class="search" placeholder="Search items or aliases…">
-        <div id="catTable" class="table-wrap"></div>
       </div>
     </section>
   </main>
 
-  <div id="toast" class="toast" hidden></div>
-  <script src="/app.js"></script>
+  <footer class="foot">
+    <div class="wrap foot-row">
+      <span class="mono muted">PADOSI · hackathon MVP · Bengaluru</span>
+      <nav><a href="/app">Order desk</a><a href="https://github.com/yogitabhuania/padosi" rel="noopener">GitHub</a></nav>
+    </div>
+    <div class="foot-word" aria-hidden="true">PADOSI</div>
+  </footer>
+
+  <script src="/landing.js"></script>
 </body>
 </html>
