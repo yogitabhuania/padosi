@@ -10,7 +10,27 @@ import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 
-DATABASE_URL = os.environ.get("DATABASE_URL") or os.environ.get("POSTGRES_URL")
+def _find_database_url():
+    """Return (name, url) of the Postgres connection string to use, or (None, None).
+
+    Vercel's Neon integration may add a prefix (e.g. STORAGE_DATABASE_URL), so after the usual
+    names, take any variable holding a postgres:// URL, preferring pooled ones.
+    """
+    for name in ("DATABASE_URL", "POSTGRES_URL"):
+        if os.environ.get(name, "").startswith(("postgres://", "postgresql://")):
+            return name, os.environ[name]
+    found = [k for k, v in os.environ.items() if v.startswith(("postgres://", "postgresql://"))]
+    rank = lambda k: (
+        "UNPOOLED" in k or "NON_POOLING" in k,
+        not k.endswith("DATABASE_URL"),
+        not k.endswith("POSTGRES_URL"),
+        k,
+    )
+    found.sort(key=rank)
+    return (found[0], os.environ[found[0]]) if found else (None, None)
+
+
+DATABASE_URL_NAME, DATABASE_URL = _find_database_url()
 ON_VERCEL = bool(os.environ.get("VERCEL"))
 # Vercel's filesystem is read-only except /tmp, and /tmp is wiped between cold starts.
 SQLITE_PATH = "/tmp/padosi.db" if ON_VERCEL else str(Path(__file__).resolve().parent.parent / "padosi.db")
@@ -115,7 +135,7 @@ def _init(conn):
 
 def storage_info():
     if IS_POSTGRES:
-        return {"engine": "postgres", "persistent": True}
+        return {"engine": "postgres", "persistent": True, "source": DATABASE_URL_NAME}
     return {"engine": "sqlite", "persistent": not ON_VERCEL}
 
 
