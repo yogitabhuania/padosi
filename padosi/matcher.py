@@ -142,6 +142,19 @@ def _openrouter_key():
     return keys[0] if keys else None
 
 
+def ai_key_source():
+    """Name (never the value) of the variable the active AI key comes from."""
+    provider = ai_provider()
+    if provider == "claude":
+        return next(n for n in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN") if os.environ.get(n))
+    if provider == "gemini":
+        return next(n for n in GEMINI_KEY_NAMES if os.environ.get(n, "").strip() and not os.environ[n].strip().startswith("sk-or-"))
+    if provider == "openrouter":
+        return next((n for n in OPENROUTER_KEY_NAMES if os.environ.get(n, "").strip()), None) or next(
+            n for n in GEMINI_KEY_NAMES if os.environ.get(n, "").strip().startswith("sk-or-"))
+    return None
+
+
 def ai_enabled():
     return ai_provider() is not None
 
