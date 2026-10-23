@@ -1,7 +1,12 @@
-"""Step 2 of the PADOSI journey: read a messy shopper list and match each line to the catalogue.
+"""The AI steps of PADOSI.
 
-Claude does the reading and matching. It never prices anything; pricing.py does the money.
-Without an API key, a simple fuzzy matcher stands in so the app still works for typed lists.
+1. Read a messy shopper list (text or photo), match each line to the catalogue, and draft the
+   opening and closing lines of the reply in the shopper's own language.
+2. Read a supplier bill or price list (text or photo) into catalogue rows, so a new store can
+   set up its catalogue in minutes instead of typing it in.
+
+Claude never prices anything: pricing.py does the money, and the owner approves every line.
+Without an API key, a simple fuzzy matcher stands in so typed lists still work.
 """
 import difflib
 import json
@@ -10,7 +15,9 @@ import re
 
 MODEL = os.environ.get("PADOSI_MODEL", "claude-opus-5-5")
 
-ITEM_SCHEMA = {
+LANGUAGES = ["english", "kannada", "hindi", "tamil", "telugu", "mixed"]
+
+LIST_SCHEMA = {
     "type": "object",
     "properties": {
         "items": {
@@ -27,24 +34,76 @@ ITEM_SCHEMA = {
                 "required": ["raw", "catalogue_id", "quantity", "confidence", "note"],
                 "additionalProperties": False,
             },
-        }
+        },
+        "language": {"type": "string", "enum": LANGUAGES},
+        "reply_opening": {"type": "string"},
+        "reply_closing": {"type": "string"},
     },
-    "required": ["items"],
+    "required": ["items", "language", "reply_opening", "reply_closing"],
     "additionalProperties": False,
 }
 
-INSTRUCTIONS = """You read grocery lists that shoppers send to a neighbourhood kirana store in Bengaluru and match each requested item to the store's catalogue.
+LIST_INSTRUCTIONS = """You read grocery lists that shoppers send to a neighbourhood kirana store in Bengaluru and match each requested item to the store's catalogue.
 
 Lists mix Kannada, Hindi and English, often transliterated into Latin script or written in Kannada/Devanagari script, with misspellings, brand shorthand and handwriting. Use the catalogue's names and aliases, and your own knowledge of Indian groceries, to find the right item.
 
-For every item the shopper asked for, return one entry:
+For every item the shopper asked for, return one entry in items:
 - raw: the shopper's line (or the relevant fragment if one line names several items), copied as written.
 - catalogue_id: the id of the best-matching catalogue item, or "" if nothing in the catalogue is a reasonable match.
 - quantity: how many of the catalogue item's unit to supply. Convert the shopper's amount into that unit, e.g. "250g jeera" against a "100 g" unit is 2.5; "2 kg tomato" against a "1 kg" unit is 2; "rice 10kg" against a "5 kg bag" is 2. If no amount is given, use 1.
 - confidence: how sure you are about both the item and the quantity, from 0 to 1. Use 0.9 or above only when the match is clear. Go below 0.75 when the item is ambiguous (for example "Amul 500" could be 500 ml milk or 500 g butter), the handwriting is unclear, the pack size differs a lot from what was asked, or there is no match.
 - note: when confidence is below 0.75, a few words the store owner can act on, e.g. "could be milk or butter". Otherwise "".
 
-Ignore greetings, names, addresses and anything that is not an item. Do not invent items the shopper did not ask for, and never calculate prices."""
+Ignore greetings, names, addresses and anything that is not an item. Do not invent items the shopper did not ask for, and never calculate prices.
+
+The owner will send the itemised quote back on WhatsApp. Write the two lines that go around it, in the language and script the shopper used (transliterated Kannada if they wrote Kannada in Latin letters, Devanagari Hindi if they wrote in Devanagari, and so on), in the warm, respectful tone of a neighbourhood shopkeeper:
+- language: the shopper's main language.
+- reply_opening: one short line greeting the customer (by name if one is given, with "avare" or "ji" as fits the language) and saying their order is below.
+- reply_closing: one short line asking them to reply to confirm, and saying it will be packed right away.
+Do not put prices, totals or item names in these two lines."""
+
+CATALOGUE_CATEGORIES = [
+    "Staples", "Pulses", "Oils", "Dairy", "Vegetables", "Fruits", "Masala", "Beverages",
+    "Snacks", "Household", "Personal care", "Pooja", "Bakery", "Other",
+]
+
+CATALOGUE_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "items": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "existing_id": {"type": "string", "description": "id of the same product already in the catalogue, else empty"},
+                    "name": {"type": "string"},
+                    "aliases": {"type": "string", "description": "Shopper names separated by ;"},
+                    "category": {"type": "string", "enum": CATALOGUE_CATEGORIES},
+                    "unit": {"type": "string"},
+                    "price": {"type": "number"},
+                    "stock": {"type": "number"},
+                    "confidence": {"type": "number"},
+                },
+                "required": ["existing_id", "name", "aliases", "category", "unit", "price", "stock", "confidence"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["items"],
+    "additionalProperties": False,
+}
+
+CATALOGUE_INSTRUCTIONS = """You help a kirana store owner in Bengaluru set up or refresh their store catalogue from a supplier bill, distributor price list, or handwritten stock note.
+
+Return one entry per product (skip headers, totals, taxes, discounts and delivery charges):
+- existing_id: if the product is already in the current catalogue below (same product and pack size), its id; otherwise "".
+- name: the product as it is sold to shoppers, brand first where there is one, e.g. "Aashirvaad Atta", "Toor Dal".
+- aliases: the names shoppers actually type for it, separated by ";": common Kannada and Hindi names in Latin script, everyday English words and frequent misspellings, e.g. "togari bele;tur dal;arhar dal;toor".
+- category: the closest category.
+- unit: the pack a shopper buys, e.g. "1 kg", "500 ml packet", "5 kg bag", "1 pc".
+- price: the selling price for one unit, copied exactly as printed: the MRP or selling-price column if there is one, otherwise the per-unit rate. Never calculate, add tax, or divide totals. If no per-unit price is printed, use 0 so the owner fills it in.
+- stock: the number of units received if the bill shows it, else 0.
+- confidence: 0 to 1, how sure you are that you read the product, pack size and price correctly."""
 
 
 def ai_enabled():
@@ -61,29 +120,30 @@ class MatchError(Exception):
     pass
 
 
-def match_with_claude(catalogue, text, image_b64=None, media_type=None):
-    import anthropic
-
-    content = []
+def _user_content(text, image_b64, media_type, photo_label, text_label):
     if image_b64:
-        content.append({"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}})
-        content.append({"type": "text", "text": "This photo is the shopper's list." + (
-            f" The owner also typed:\n{text}" if text else "")})
-    else:
-        content.append({"type": "text", "text": f"Shopper's list:\n{text}"})
+        return [
+            {"type": "image", "source": {"type": "base64", "media_type": media_type, "data": image_b64}},
+            {"type": "text", "text": photo_label + (f"\n\nThe owner also typed:\n{text}" if text else "")},
+        ]
+    return [{"type": "text", "text": f"{text_label}\n{text}"}]
+
+
+def _ask_claude(instructions, catalogue, content, schema):
+    """One structured-output request. The catalogue goes in the system prompt so it is cached."""
+    import anthropic
 
     client = anthropic.Anthropic()
     try:
         response = client.beta.messages.create(
             model=MODEL,
             max_tokens=16000,
-            # The catalogue changes rarely, so cache it across quotes.
             system=[
-                {"type": "text", "text": INSTRUCTIONS},
+                {"type": "text", "text": instructions},
                 {"type": "text", "text": _catalogue_block(catalogue), "cache_control": {"type": "ephemeral"}},
             ],
             messages=[{"role": "user", "content": content}],
-            output_config={"effort": "low", "format": {"type": "json_schema", "schema": ITEM_SCHEMA}},
+            output_config={"effort": "low", "format": {"type": "json_schema", "schema": schema}},
             betas=["server-side-fallback-2026-07-01"],
             fallbacks="default",
         )
@@ -92,21 +152,36 @@ def match_with_claude(catalogue, text, image_b64=None, media_type=None):
     except anthropic.RateLimitError:
         raise MatchError("Claude is rate limited right now. Try again in a minute.")
     except anthropic.BadRequestError as e:
-        raise MatchError(f"Claude could not read this list: {e.message}")
+        raise MatchError(f"Claude could not read this: {e.message}")
     except anthropic.APIStatusError as e:
         raise MatchError(f"Claude returned an error ({e.status_code}). Try again.")
     except anthropic.APIConnectionError:
         raise MatchError("Could not reach Claude. Check the internet connection.")
 
     if response.stop_reason == "refusal":
-        raise MatchError("Claude declined to read this list.")
+        raise MatchError("Claude declined to read this.")
     if response.stop_reason == "max_tokens":
-        raise MatchError("The list is too long to read in one go. Split it into two quotes.")
+        raise MatchError("This is too long to read in one go. Split it into two.")
     text_out = next((b.text for b in response.content if b.type == "text"), "")
     try:
-        return json.loads(text_out)["items"]
-    except (ValueError, KeyError):
+        return json.loads(text_out)
+    except ValueError:
         raise MatchError("Claude returned an unreadable answer. Try again.")
+
+
+def match_with_claude(catalogue, text, image_b64=None, media_type=None, customer_name=""):
+    content = _user_content(text, image_b64, media_type, "This photo is the shopper's list.", "Shopper's list:")
+    if customer_name:
+        content.append({"type": "text", "text": f"Customer's name: {customer_name}"})
+    return _ask_claude(LIST_INSTRUCTIONS, catalogue, content, LIST_SCHEMA)
+
+
+def extract_catalogue(catalogue, text, image_b64=None, media_type=None):
+    if not ai_enabled():
+        raise MatchError("Reading bills needs Claude. Add ANTHROPIC_API_KEY, or upload a CSV instead.")
+    content = _user_content(text, image_b64, media_type, "This photo is a supplier bill or price list.",
+                            "Supplier bill or price list:")
+    return _ask_claude(CATALOGUE_INSTRUCTIONS, catalogue, content, CATALOGUE_SCHEMA)["items"]
 
 
 # ---------- offline fallback ----------
@@ -196,10 +271,12 @@ def match_offline(catalogue, text):
     return results
 
 
-def match_list(catalogue, text, image_b64=None, media_type=None):
-    """Returns (items, engine)."""
+def match_list(catalogue, text, image_b64=None, media_type=None, customer_name=""):
+    """Returns {items, language, reply_opening, reply_closing, engine}."""
     if ai_enabled():
-        return match_with_claude(catalogue, text, image_b64, media_type), "claude"
+        result = match_with_claude(catalogue, text, image_b64, media_type, customer_name)
+        return {**result, "engine": "claude"}
     if image_b64:
         raise MatchError("Reading photos needs Claude. Add ANTHROPIC_API_KEY, or type the list instead.")
-    return match_offline(catalogue, text), "offline"
+    return {"items": match_offline(catalogue, text), "language": "", "reply_opening": "",
+            "reply_closing": "", "engine": "offline"}

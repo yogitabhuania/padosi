@@ -47,6 +47,14 @@ SCHEMA = [
     )""",
 ]
 
+# Columns added after the first release; created on start-up if an older database lacks them.
+ORDER_COLUMNS_ADDED = [
+    ("reply_language", "TEXT NOT NULL DEFAULT ''"),
+    ("reply_opening", "TEXT NOT NULL DEFAULT ''"),
+    ("reply_closing", "TEXT NOT NULL DEFAULT ''"),
+    ("manual_seconds", "DOUBLE PRECISION"),
+]
+
 _initialised = False
 
 
@@ -90,6 +98,14 @@ def _init(conn):
     cur = conn.cursor()
     for stmt in SCHEMA:
         cur.execute(stmt)
+    if IS_POSTGRES:
+        for name, decl in ORDER_COLUMNS_ADDED:
+            cur.execute(f"ALTER TABLE orders ADD COLUMN IF NOT EXISTS {name} {decl}")
+    else:
+        existing = {r[1] for r in cur.execute("PRAGMA table_info(orders)").fetchall()}
+        for name, decl in ORDER_COLUMNS_ADDED:
+            if name not in existing:
+                cur.execute(f"ALTER TABLE orders ADD COLUMN {name} {decl}")
     cur.execute("SELECT COUNT(*) AS n FROM catalogue")
     if dict(cur.fetchone())["n"] == 0:
         _write_catalogue(cur, parse_catalogue_csv(SAMPLE_CSV.read_text(encoding="utf-8")), replace=True)
@@ -123,7 +139,7 @@ def parse_catalogue_csv(text):
             stock = float(get("stock") or 0)
         except ValueError:
             raise ValueError(f"Row {n}: price and stock must be numbers.")
-        item_id = get("id") or _slug(name)
+        item_id = get("id") or slug(name)
         base, k = item_id, 2
         while item_id in seen:
             item_id, k = f"{base}-{k}", k + 1
@@ -137,7 +153,7 @@ def parse_catalogue_csv(text):
     return items
 
 
-def _slug(name):
+def slug(name):
     out = "".join(c if c.isalnum() else "-" for c in name.upper())
     return "-".join(p for p in out.split("-") if p)[:40]
 
@@ -201,12 +217,14 @@ def create_order(order):
         conn.cursor().execute(
             _sql(
                 "INSERT INTO orders (id, created_at, customer_name, customer_phone, source_type, raw_text, "
-                "lines_json, total, flagged_count, status, engine, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+                "lines_json, total, flagged_count, status, engine, started_at, reply_language, reply_opening, "
+                "reply_closing) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
             ),
             [
                 order["id"], order["created_at"], order["customer_name"], order["customer_phone"],
                 order["source_type"], order["raw_text"], json.dumps(order["lines"]), order["total"],
                 order["flagged_count"], order["status"], order["engine"], order["started_at"],
+                order["reply_language"], order["reply_opening"], order["reply_closing"],
             ],
         )
 

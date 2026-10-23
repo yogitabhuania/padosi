@@ -71,13 +71,17 @@ def _fmt_money(x):
 def quote_message(order, store_name):
     """The WhatsApp text the owner copies and sends back to the shopper."""
     lines = [l for l in order["lines"] if l["catalogue_id"]]
-    greeting = f"Namaskara {order['customer_name']}!" if order.get("customer_name") else "Namaskara!"
-    out = [greeting, f"Your order from *{store_name}*:", ""]
+    # Claude drafts the opening and closing in the shopper's language; the item lines and totals
+    # below are always produced by this script.
+    opening = order.get("reply_opening") or (
+        f"Namaskara {order['customer_name']}!" if order.get("customer_name") else "Namaskara!")
+    closing = order.get("reply_closing") or "Reply YES to confirm. We will pack it right away."
+    out = [opening, f"*{store_name}*", ""]
     for i, l in enumerate(lines, 1):
         out.append(f"{i}. {l['name']} ({l['unit']}) x {_fmt_qty(l['quantity'])} = {_fmt_money(l['line_total'])}")
     out += ["", f"*Total: {_fmt_money(order['total'])}*"]
     missing = [l["raw"] for l in order["lines"] if not l["catalogue_id"] and l["raw"]]
     if missing:
         out += ["", "Not available today: " + ", ".join(missing)]
-    out += ["", "Reply YES to confirm. We will pack it right away."]
+    out += ["", closing]
     return "\n".join(out)

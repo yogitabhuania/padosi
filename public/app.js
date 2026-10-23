@@ -242,14 +242,18 @@ function renderReview() {
   const o = state.order;
   const flagged = o.lines.filter((l) => l.flags.length);
   const problems = o.lines.filter((l) => l.flags.some((f) => FLAG_INFO[f]?.cls === "danger"));
-  const engine = o.engine === "claude" ? "Read by Claude" : "Read by offline matcher";
+  const engine = o.engine === "claude"
+    ? `<span class="role ai">Claude</span> read this list`
+    : `Read by the basic offline matcher (Claude not connected)`;
+  const lang = o.reply_language && o.reply_language !== "english"
+    ? ` · reply drafted in ${o.reply_language[0].toUpperCase()}${o.reply_language.slice(1)}` : "";
 
   $("#review").innerHTML = `
     <div class="card">
       <div class="review-head">
         <div>
           <h1>Quote for ${esc(o.customer_name || "walk-in customer")}</h1>
-          <div class="muted small">${esc(engine)} · ${o.source_type === "photo" ? "from photo" : "from pasted list"} · <span class="timer" id="timer">0s</span> since the list came in</div>
+          <div class="muted small">${engine} · ${o.source_type === "photo" ? "from photo" : "from pasted list"}${esc(lang)} · <span class="timer" id="timer">0s</span> since the list came in</div>
         </div>
         <button class="ghost small-btn" id="startOver">Start over</button>
       </div>
@@ -318,6 +322,7 @@ function renderLine(l, idx) {
         ${l.raw ? `<div class="raw">Asked: <b>${esc(l.raw)}</b></div>` : ""}
         <select aria-label="Item">${catalogueOptions(l.catalogue_id)}</select>
         ${flags || l.note || l.stock != null ? `<div class="flags">
+          ${l.raw && l.catalogue_id ? confidenceTag(l.confidence) : ""}
           ${flags}
           ${l.note ? `<span class="muted small">${esc(l.note)}</span>` : ""}
           ${l.flags.includes("low_confidence") ? `<button class="ok-btn">Looks right</button>` : ""}
@@ -329,6 +334,12 @@ function renderLine(l, idx) {
       <div class="total">${l.catalogue_id ? rupees(l.line_total) : "–"}</div>
       <button class="remove" title="Remove line" aria-label="Remove line">×</button>
     </div>`;
+}
+
+function confidenceTag(c) {
+  const pct = Math.round((c ?? 1) * 100);
+  const cls = pct >= 90 ? "high" : pct < 75 ? "low" : "";
+  return `<span class="conf ${cls}" title="How sure Claude is about this match">${pct}% sure</span>`;
 }
 
 function linesPayload() {
@@ -397,7 +408,9 @@ function renderApproved() {
         <a class="ghost" id="openWa" href="${waLink(o)}" target="_blank" rel="noopener" style="text-align:center">Open WhatsApp</a>
         <button class="ghost" id="nextOrder">Next order</button>
       </div>
+      ${fieldTestHtml(o)}
     </div>`;
+  bindFieldTest(o);
   $("#copyMsg").onclick = async () => {
     try {
       await navigator.clipboard.writeText(o.message);
@@ -411,6 +424,69 @@ function renderApproved() {
     }
   };
   $("#nextOrder").onclick = resetComposer;
+}
+
+// ---------- field test: same order timed by hand ----------
+
+function fieldTestHtml(o) {
+  if (o.manual_seconds) {
+    const saved = o.manual_seconds - (o.seconds_to_approve || 0);
+    return `
+      <div class="field-test">
+        <b>Field test</b> <span class="muted small">same list, by hand vs with PADOSI</span>
+        <div class="compare">
+          <div><div class="muted small">By hand</div><div class="v">${fmtSeconds(o.manual_seconds)}</div></div>
+          <div><div class="muted small">With PADOSI</div><div class="v">${fmtSeconds(o.seconds_to_approve)}</div></div>
+        </div>
+        <div class="muted small" style="margin-top:8px">${saved > 0 ? `Saved ${fmtSeconds(saved)} on this order.` : "No time saved on this order."} <button class="link" id="ftRedo">Redo</button></div>
+      </div>`;
+  }
+  return `
+    <div class="field-test">
+      <b>Field test</b> <span class="muted small">Ask the owner to quote the same list by hand (read, find prices, add up, type the reply). Time it here to compare.</span>
+      <div class="ft-row">
+        <span class="stopwatch" id="ftClock">0:00</span>
+        <button class="ghost small-btn" id="ftStart">Start stopwatch</button>
+        <span class="muted small">or type seconds</span>
+        <input id="ftSeconds" type="number" min="1" step="1" placeholder="e.g. 360" inputmode="numeric">
+        <button class="primary small-btn" id="ftSave" style="color:var(--brand-ink)">Save</button>
+      </div>
+    </div>`;
+}
+
+function bindFieldTest(o) {
+  const redo = $("#ftRedo");
+  if (redo) {
+    redo.onclick = () => { o.manual_seconds = null; renderApproved(); };
+    return;
+  }
+  let started = null, tick = null;
+  $("#ftStart").onclick = () => {
+    if (!started) {
+      started = Date.now();
+      $("#ftStart").textContent = "Stop";
+      tick = setInterval(() => {
+        const s = Math.floor((Date.now() - started) / 1000);
+        $("#ftClock").textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
+      }, 250);
+    } else {
+      clearInterval(tick);
+      $("#ftSeconds").value = Math.round((Date.now() - started) / 1000);
+      started = null;
+      $("#ftStart").textContent = "Start again";
+    }
+  };
+  $("#ftSave").onclick = async () => {
+    clearInterval(tick);
+    const seconds = parseFloat($("#ftSeconds").value);
+    if (!(seconds > 0)) return toast("Time the order first, or type the seconds.");
+    try {
+      state.order = await api(`/api/orders/${o.id}/manual`, { method: "POST", body: { seconds } });
+      renderApproved();
+    } catch (err) {
+      toast(err.message);
+    }
+  };
 }
 
 // ---------- orders ----------
@@ -428,12 +504,21 @@ async function loadOrders() {
 $("#refreshOrders").onclick = loadOrders;
 
 function renderStats(s) {
-  $("#stats").innerHTML = [
+  const tiles = [
     ["Avg. list → quote", fmtSeconds(s.avg_seconds_to_approve)],
     ["Under a minute", s.orders_approved ? `${s.under_a_minute} / ${s.orders_approved}` : "–"],
     ["Approved today", s.approved_today],
     ["Value approved", rupees(s.revenue_approved)],
-  ].map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`).join("");
+  ].map(([k, v]) => `<div class="stat"><div class="v">${v}</div><div class="k">${k}</div></div>`);
+  if (s.paired_orders) {
+    const n = s.paired_orders;
+    tiles.unshift(`
+      <div class="stat wide">
+        <div class="v">${fmtSeconds(s.avg_manual_seconds)} by hand → ${fmtSeconds(s.avg_padosi_seconds_paired)} with PADOSI</div>
+        <div class="k">Field test: ${n} order${n === 1 ? "" : "s"} timed both ways (average)</div>
+      </div>`);
+  }
+  $("#stats").innerHTML = tiles.join("");
 }
 
 function renderOrders(orders) {
@@ -551,6 +636,125 @@ $("#resetCat").addEventListener("click", async () => {
     toast(err.message);
   }
 });
+
+// ---------- supplier bill → catalogue (Claude) ----------
+
+const bill = { photo: null, rows: [] };
+const CATEGORIES = ["Staples", "Pulses", "Oils", "Dairy", "Vegetables", "Fruits", "Masala", "Beverages",
+  "Snacks", "Household", "Personal care", "Pooja", "Bakery", "Other"];
+
+function showBillError(msg) {
+  $("#billError").textContent = msg;
+  $("#billError").hidden = !msg;
+}
+
+$("#billPhoto").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  e.target.value = "";
+  if (!file) return;
+  try {
+    bill.photo = await shrinkImage(file, 2000);
+    $("#billImg").src = bill.photo.url;
+    $("#billPreview").hidden = false;
+  } catch {
+    showBillError("That photo could not be opened. Try another one.");
+  }
+});
+
+$("#billClear").addEventListener("click", () => {
+  bill.photo = null;
+  $("#billPreview").hidden = true;
+});
+
+$("#readBill").addEventListener("click", async () => {
+  const text = $("#billText").value.trim();
+  if (!text && !bill.photo) return showBillError("Paste a price list or add a photo of a bill first.");
+  showBillError("");
+  $("#billResult").hidden = true;
+  $("#billWorking").hidden = false;
+  $("#readBill").disabled = true;
+  try {
+    const res = await api("/api/catalogue/extract", {
+      method: "POST",
+      body: { text, image_base64: bill.photo?.base64 || null, media_type: bill.photo?.mediaType || null },
+    });
+    bill.rows = res.items.map((r) => ({ ...r, keep: true }));
+    if (!bill.rows.length) showBillError("Claude didn't find any products in that. Try a clearer photo.");
+    else renderBillRows();
+  } catch (err) {
+    showBillError(err.message);
+  } finally {
+    $("#billWorking").hidden = true;
+    $("#readBill").disabled = false;
+  }
+});
+
+function renderBillRows() {
+  const box = $("#billResult");
+  const kept = bill.rows.filter((r) => r.keep).length;
+  box.hidden = false;
+  box.innerHTML = `
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th></th><th>Item</th><th>Shopper names</th><th>Category</th><th>Unit</th><th class="num">Price ₹</th><th class="num">+ Stock</th><th></th></tr></thead>
+        <tbody>
+          ${bill.rows.map((r, i) => {
+            const priceChange = r.existing_id && r.current_price !== r.price;
+            const tag = r.existing_id
+              ? `<span class="pill neutral tag">Update${priceChange ? ` · was ${rupees(r.current_price)}` : ""}</span>`
+              : `<span class="pill ok tag">New</span>`;
+            const unsure = r.confidence < 0.75 || !r.price
+              ? `<span class="pill warn tag">${r.price ? "Check" : "Add price"}</span>` : "";
+            return `
+            <tr data-i="${i}">
+              <td><input type="checkbox" data-f="keep" ${r.keep ? "checked" : ""} aria-label="Include"></td>
+              <td><input data-f="name" value="${esc(r.name)}"></td>
+              <td><input data-f="aliases" value="${esc(r.aliases)}"></td>
+              <td><select data-f="category">${CATEGORIES.map((c) => `<option ${c === r.category ? "selected" : ""}>${c}</option>`).join("")}</select></td>
+              <td><input data-f="unit" value="${esc(r.unit)}"></td>
+              <td><input class="n" data-f="price" type="number" min="0" step="any" value="${r.price}"></td>
+              <td><input class="n" data-f="stock" type="number" min="0" step="any" value="${r.stock}"></td>
+              <td>${tag} ${unsure}</td>
+            </tr>`;
+          }).join("")}
+        </tbody>
+      </table>
+    </div>
+    <div class="bill-actions">
+      <span class="muted small">Prices are copied from the bill, not calculated. Check them, then save.</span>
+      <div class="btn-group">
+        <button class="ghost small-btn" id="billCancel">Discard</button>
+        <button class="primary" id="billSave" ${kept ? "" : "disabled"}>Save ${kept} item${kept === 1 ? "" : "s"}</button>
+      </div>
+    </div>`;
+
+  box.querySelectorAll("tr[data-i]").forEach((tr) => {
+    const row = bill.rows[+tr.dataset.i];
+    tr.querySelectorAll("[data-f]").forEach((el) => {
+      el.addEventListener("change", () => {
+        const f = el.dataset.f;
+        row[f] = f === "keep" ? el.checked : ["price", "stock"].includes(f) ? parseFloat(el.value) || 0 : el.value;
+        if (f === "keep") renderBillRows();
+      });
+    });
+  });
+  $("#billCancel").onclick = () => { bill.rows = []; box.hidden = true; };
+  $("#billSave").onclick = async () => {
+    try {
+      const res = await api("/api/catalogue/import", { method: "POST", body: { items: bill.rows.filter((r) => r.keep) } });
+      state.catalogue = res.catalogue;
+      bill.rows = [];
+      bill.photo = null;
+      box.hidden = true;
+      $("#billText").value = "";
+      $("#billPreview").hidden = true;
+      renderCatalogue();
+      toast(`Saved ${res.imported} items to the catalogue`);
+    } catch (err) {
+      toast(err.message);
+    }
+  };
+}
 
 // ---------- boot ----------
 

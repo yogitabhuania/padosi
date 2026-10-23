@@ -32,9 +32,15 @@
   <main>
     <!-- NEW QUOTE -->
     <section id="view-quote" class="view">
+      <ol class="how" aria-label="How PADOSI works">
+        <li><span class="role ai">Claude</span><b>Reads the list</b><span class="muted small">Kannada, Hindi, English, handwriting. Matches each item to your catalogue and says how sure it is.</span></li>
+        <li><span class="role script">Script</span><b>Prices it</b><span class="muted small">Totals and stock checks are plain arithmetic. AI never touches the money.</span></li>
+        <li><span class="role you">You</span><b>Approve in one tap</b><span class="muted small">Fix anything flagged, then send the reply, written in the shopper's language.</span></li>
+      </ol>
+
       <div id="composer" class="card">
         <h1>Paste a shopper's list</h1>
-        <p class="muted">Copy the WhatsApp message, or add a photo of a handwritten list. Kannada, Hindi and English all work.</p>
+        <p class="muted">Keep using your own WhatsApp. Copy the shopper's message here, or add a photo of a handwritten list. No new app for your customers.</p>
 
         <div class="row two">
           <label>Customer name<input id="custName" placeholder="e.g. Lakshmi aunty" autocomplete="off"></label>
@@ -92,6 +98,32 @@
 
     <!-- CATALOGUE -->
     <section id="view-catalogue" class="view" hidden>
+      <div class="card">
+        <div class="card-head wrap">
+          <div>
+            <h2>Add items from a supplier bill <span class="role ai">Claude</span></h2>
+            <p class="muted small">Photograph a distributor bill or price list, or paste one. Claude turns it into catalogue items with the Kannada and Hindi names shoppers use, and updates prices and stock for items you already have. You check every row before it's saved.</p>
+          </div>
+        </div>
+        <textarea id="billText" rows="4" placeholder="Toor dal 1kg  MRP 170  qty 10&#10;Gold Winner oil 1L pouch  158  x 12&#10;Parle-G 250g  25  x 24"></textarea>
+        <div class="photo-row">
+          <label class="photo-btn">
+            <input id="billPhoto" type="file" accept="image/*" hidden>
+            <span>📷 &nbsp;Add photo of bill</span>
+          </label>
+          <div id="billPreview" class="photo-preview" hidden>
+            <img id="billImg" alt="Supplier bill">
+            <button id="billClear" class="link">Remove</button>
+          </div>
+          <button id="readBill" class="primary">Read bill</button>
+        </div>
+        <p id="billError" class="error" hidden></p>
+        <div id="billWorking" class="working" style="margin-top:14px" hidden>
+          <div class="spinner"></div><div class="muted small">Claude is reading the bill…</div>
+        </div>
+        <div id="billResult" hidden></div>
+      </div>
+
       <div class="card">
         <div class="card-head wrap">
           <div>
